@@ -2,10 +2,7 @@ use dashmap::DashMap;
 use std::sync::{Arc, RwLock};
 
 use crate::exchange_listeners::{
-    crypto_models::CryptoPrice,
-    orderbooks::{poly_orderbook::OrderBook, CryptoOrderbook, OrderbookDepth},
-    poly_models::{AssetOrders, OpenOrder, Position},
-    Exchange, Instrument,
+    Exchange, Instrument, crypto_models::CryptoPrice, orderbooks::{CryptoOrderbook, OrderbookDepth, poly_orderbook::OrderBook}, poly_client::PolyClient, poly_models::{AssetOrders, OpenOrder, Position}
 };
 
 // --- Shared State Structure (Unchanged) ---
@@ -14,6 +11,7 @@ pub struct PolyMarketState {
     pub orderbooks: Arc<DashMap<String, Arc<RwLock<OrderBook>>>>,
     pub positions: Arc<DashMap<String, Arc<RwLock<Position>>>>,
     pub open_orders: Arc<DashMap<String, AssetOrders>>,
+    pub poly_client: Arc<PolyClient>
 }
 
 /// The main application state, holding final, converted USDT prices.

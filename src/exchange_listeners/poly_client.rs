@@ -16,7 +16,7 @@ use crate::{
     marketmaking::marketmakingclient::CLIENT,
 };
 
-#[allow(dead_code)]
+#[derive(Debug, Default)]
 pub struct PolyClient;
 
 impl PolyClient {
