@@ -60,6 +60,8 @@ impl Strategy for KoenStrategy {
                     return;
                 }
 
+                
+
                 let bids: Vec<(u32, u32)> = orderbook
                     .get_bid_map()
                     .iter()
