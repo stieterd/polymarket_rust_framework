@@ -100,6 +100,8 @@ pub struct Market {
     pub bestAsk: Option<f64>,
     pub automaticallyActive: Option<bool>,
     pub clearBookOnStart: Option<bool>,
+    #[serde(default, skip_deserializing)]
+    pub is_yes_market: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -183,25 +185,40 @@ pub struct Event {
     pub negRiskMarketID: Option<String>,
     pub negRiskFeeBips: Option<f64>,
     pub commentCount: Option<i32>,
-    pub markets: Option<HashMap<String, Market>>,
+    pub market_asset_ids: Option<Vec<String>>,
     pub enableNegRisk: Option<bool>,
     // Add other fields as needed
 }
 
-pub fn build_asset_id_to_market_map(events: &Vec<EventJson>) -> HashMap<String, Arc<Market>> {
+fn expand_market_variants(market: &Market) -> Vec<(String, Market)> {
+    if let Some(clob_token_ids) = &market.clobTokenIds {
+        if let Ok(asset_ids) = serde_json::from_str::<Vec<String>>(clob_token_ids) {
+            return asset_ids
+                .into_iter()
+                .enumerate()
+                .map(|(idx, asset_id)| {
+                    let mut market_with_side = market.clone();
+                    market_with_side.is_yes_market = match idx {
+                        0 => Some(true),
+                        1 => Some(false),
+                        _ => None,
+                    };
+                    (asset_id, market_with_side)
+                })
+                .collect();
+        }
+    }
+    Vec::new()
+}
+
+pub fn build_asset_id_to_market_map(events: &[EventJson]) -> HashMap<String, Arc<Market>> {
     let mut asset_id_to_market: HashMap<String, Arc<Market>> = HashMap::new();
 
     for event in events {
         if let Some(markets) = &event.markets {
             for market in markets {
-                if let Some(clob_token_ids) = &market.clobTokenIds {
-                    let asset_ids: Vec<String> = serde_json::from_str(clob_token_ids).unwrap();
-
-                    asset_id_to_market.insert(asset_ids[1].clone(), Arc::new(market.clone()));
-                    /* THIS IS IF WE WANT TO ADD THE YES MARKETS TOO */
-                    // for asset_id in asset_ids {
-                    //     asset_id_to_market.insert(asset_id, market.clone());
-                    // }
+                for (asset_id, market_with_side) in expand_market_variants(market) {
+                    asset_id_to_market.insert(asset_id, Arc::new(market_with_side));
                 }
             }
         }
@@ -223,20 +240,15 @@ pub fn build_asset_id_to_event_map(events: &Vec<EventJson>) -> HashMap<String, A
 }
 
 pub fn event_json_to_event(event_json: &EventJson) -> Event {
-    let mut asset_id_to_market: HashMap<String, Market> = HashMap::new();
+    let mut market_ids: Vec<String> = Vec::new();
 
     if let Some(markets) = &event_json.markets {
         for market in markets {
-            if let Some(clob_token_ids) = &market.clobTokenIds {
-                // Deserialize the clob_token_ids JSON string into a Vec<String>
-                let asset_ids: Vec<String> =
-                    serde_json::from_str(clob_token_ids).unwrap_or_default();
-                asset_id_to_market.insert(asset_ids[1].clone(), market.clone());
-                /* THIS IS IF WE WANT TO ADD THE YES MARKETS TOO */
-                // for asset_id in asset_ids {
-                //     asset_id_to_market.insert(asset_id, market.clone());
-                // }
-            }
+            market_ids.extend(
+                expand_market_variants(market)
+                    .into_iter()
+                    .map(|(asset_id, _)| asset_id),
+            );
         }
     }
 
@@ -278,27 +290,26 @@ pub fn event_json_to_event(event_json: &EventJson) -> Event {
         negRiskMarketID: event_json.negRiskMarketID.clone(),
         negRiskFeeBips: event_json.negRiskFeeBips,
         commentCount: event_json.commentCount,
-        markets: if asset_id_to_market.is_empty() {
+        market_asset_ids: if market_ids.is_empty() {
             None
         } else {
-            Some(asset_id_to_market)
+            Some(market_ids)
         },
         enableNegRisk: event_json.enableNegRisk, // Copy other fields as needed
     };
     event
 }
 
+pub fn events_json_to_events_with_market_map(
+    events: Vec<EventJson>,
+) -> (Vec<Event>, HashMap<String, Arc<Market>>) {
+    let market_map = build_asset_id_to_market_map(&events);
+    let event_vec = events.iter().map(event_json_to_event).collect();
+    (event_vec, market_map)
+}
+
 pub fn events_json_to_events(events: Vec<EventJson>) -> Vec<Event> {
-    let mut event_vec = vec![];
-
-    for event_json in events {
-        // Initialize the markets HashMap
-        let event = event_json_to_event(&event_json);
-
-        event_vec.push(event);
-    }
-
-    event_vec
+    events_json_to_events_with_market_map(events).0
 }
 
 // pub fn map_asset_ids_to_events(events: &[Event]) -> HashMap<String, Vec<Event>> {

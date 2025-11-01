@@ -9,6 +9,8 @@ pub const POLY_API_PASSPHRASE: &str =
 
 pub const PRIVATE_KEY: &str = "0x8dc78334ff702005b631e249d1e02e76e179af634e4c3869add8dc007b4de411";
 pub const ADDRESS_STR: &str = "0xB0A60787710f8D6254dC0E304Fc72b6A3907e0C2";
+pub const SIGNER_STR: &str = "0x59Bb2eca7dDC4553fA936129D3613b1aA340C278";
 lazy_static! {
     pub static ref ADDRESS: H160 = H160::from_str(ADDRESS_STR).unwrap();
+    pub static ref SIGNER: H160 = H160::from_str(SIGNER_STR).unwrap();
 }

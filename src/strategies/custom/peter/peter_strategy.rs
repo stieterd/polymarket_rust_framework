@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use log::{error, info};
 use std::{
     collections::VecDeque,
@@ -34,13 +33,12 @@ impl PeterStrategy {
     }
 }
 
-#[async_trait]
 impl Strategy for PeterStrategy {
     fn name(&self) -> &'static str {
         "PeterStrategy"
     }
 
-    async fn poly_handle_market_price_change(
+    fn poly_handle_market_price_change(
         &self,
         _ctx: &StrategyContext,
         _listener: Listener,
@@ -77,7 +75,7 @@ impl Strategy for PeterStrategy {
                 if !matches_best {
                     return;
                 }
-                
+
                 // If price change in best bid or best ask
                 if _payload.size == "0" {
                     // Collect Orderbook Context in our queue
@@ -92,18 +90,27 @@ impl Strategy for PeterStrategy {
                             queue.pop_front();
                         }
                     }
-
                 }
 
+                let negrisk = _ctx
+                    .poly_state
+                    .markets
+                    .get(asset_id)
+                    .and_then(|m| m.negRisk.clone())
+                    .unwrap_or(false);
+
                 // println!("Checking for volume");
-                if let Some((ask_price, ask_size)) = best_ask {
-                    info!("{:?}, {:?}", ask_size, MAX_VOLUME);
-                    if ask_size < MAX_VOLUME {
+                if let Some((bid_price, bid_size)) = best_bid {
+                    // info!("{:?}, {:?}", ask_size, MAX_VOLUME);
+                    if bid_size < MAX_VOLUME && !negrisk {
                         if let Ok(mut placed) = self.order_placed.lock() {
                             if !*placed {
                                 *placed = true;
-                                order_to_place =
-                                    Some((ask_price, ask_size, orderbook.get_tick_size().to_string()));
+                                order_to_place = Some((
+                                    bid_price,
+                                    bid_size,
+                                    orderbook.get_tick_size().to_string(),
+                                ));
                             }
                         }
                     }
@@ -112,21 +119,35 @@ impl Strategy for PeterStrategy {
         }
         if let Some((price, size, tick_size)) = order_to_place {
             println!("We are placing an order");
-            if let Err(err) = PolyClient::place_limit_order(
-                &_ctx.poly_state,
-                asset_id,
-                OrderSide::Buy,
-                price,
-                size,
-                tick_size.as_str(),
-            )
-            .await
-            {
-                error!(
-                    "[PeterStrategy] Failed to place limit order for {} at {}x{}: {}",
-                    asset_id, price, size, err
-                );
-            }
+            let negrisk = _ctx
+                .poly_state
+                .markets
+                .get(asset_id)
+                .and_then(|m| m.negRisk.clone())
+                .unwrap_or(false);
+
+            let poly_state = Arc::clone(&_ctx.poly_state);
+            let asset_id_owned = asset_id.clone();
+            let tick_size_owned = tick_size.clone();
+
+            tokio::spawn(async move {
+                if let Err(err) = PolyClient::place_limit_order(
+                    poly_state.as_ref(),
+                    &asset_id_owned,
+                    OrderSide::Buy,
+                    price,
+                    10000,
+                    tick_size_owned.as_str(),
+                    negrisk,
+                )
+                .await
+                {
+                    error!(
+                        "[PeterStrategy] Failed to place limit order for {} at {}x{}: {}",
+                        asset_id_owned, price, size, err
+                    );
+                }
+            });
         }
     }
 }

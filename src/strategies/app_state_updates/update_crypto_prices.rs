@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use std::sync::{Arc, RwLock};
 
 use crate::{
@@ -20,13 +19,12 @@ impl UpdateCryptoPriceStrategy {
     }
 }
 
-#[async_trait]
 impl Strategy for UpdateCryptoPriceStrategy {
     fn name(&self) -> &'static str {
         "UpdateCryptoPrices"
     }
 
-    async fn crypto_handle_price_update(
+    fn crypto_handle_price_update(
         &self,
         _ctx: &crate::strategies::StrategyContext,
         _exchange: crate::exchange_listeners::Exchange,

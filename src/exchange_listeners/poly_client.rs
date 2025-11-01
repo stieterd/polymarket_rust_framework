@@ -30,6 +30,11 @@ impl PolyClient {
         tick_size: &str,
         neg_risk: bool,
     ) -> Result<Value, Box<dyn Error + Send + Sync>> {
+        if let Ok(rate_limit) = poly_state.rate_limit.read() {
+            if rate_limit.should_wait() {
+                return Err("Rate limit has been hit".into());
+            }
+        }
         let client = Arc::clone(&CLIENT);
         let price_dec = price as f64 / 1000.0;
         let size_dec = size as f64 / 1000.0;
@@ -44,6 +49,10 @@ impl PolyClient {
         //     tick_size,
         //     neg_risk
         // );
+
+        if let Ok(mut rate_limit) = poly_state.rate_limit.write() {
+            rate_limit.update_timestamp();
+        }
 
         let local_order = Self::record_order(poly_state, asset_id, side, price, size, 0, None)
             .ok_or_else(|| "order already exists".to_string())?;

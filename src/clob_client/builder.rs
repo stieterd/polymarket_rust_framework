@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use tiny_keccak::{Hasher, Keccak};
 
 use super::clob_auth::make_domain;
-use super::constants::{NEG_RISK_EXCHANGE, POLYGON};
+use super::constants::{EXCHANGE, NEG_RISK_EXCHANGE, POLYGON};
 use super::utils::{generate_seed, prepend_zx};
 use super::{
     clob_types::{CreateOrderOptions, OrderArgs},
@@ -66,6 +66,15 @@ lazy_static! {
             Some("Polymarket CTF Exchange"),
             Some("1"),
             Some(U256::from(POLYGON)),
+            Some(*EXCHANGE),
+        );
+        domain_separator.struct_hash()
+    };
+    pub static ref DOMAIN_SEPARATOR_HASH_NEG_RISK: [u8; 32] = {
+        let domain_separator = make_domain(
+            Some("Polymarket CTF Exchange"),
+            Some("1"),
+            Some(U256::from(POLYGON)),
             Some(*NEG_RISK_EXCHANGE),
         );
         domain_separator.struct_hash()
@@ -75,6 +84,13 @@ lazy_static! {
         prefix[0] = 0x19;
         prefix[1] = 0x01;
         prefix[2..].copy_from_slice(&DOMAIN_SEPARATOR_HASH[..]);
+        prefix
+    };
+    pub static ref MESSAGE_PREFIX_NEG_RISK: [u8; 34] = {
+        let mut prefix = [0u8; 34];
+        prefix[0] = 0x19;
+        prefix[1] = 0x01;
+        prefix[2..].copy_from_slice(&DOMAIN_SEPARATOR_HASH_NEG_RISK[..]);
         prefix
     };
 }
@@ -237,13 +253,18 @@ impl OrderBuilder {
             signature_type: ethers::types::U256::from(data.signature_type),
         };
 
-        self.sign_prepared_order(order)
+        self.sign_prepared_order(order, options.neg_risk)
     }
 
-    pub fn sign_prepared_order(&self, order: Order) -> SignedOrder {
+    pub fn sign_prepared_order(&self, order: Order, neg_risk: bool) -> SignedOrder {
         let order_struct_hash = compute_order_struct_hash(&order);
         let mut message = Vec::with_capacity(2 + 32 + 32);
-        message.extend_from_slice(&MESSAGE_PREFIX[..]);
+        if neg_risk {
+            message.extend_from_slice(&MESSAGE_PREFIX_NEG_RISK[..]);
+        } else {
+            message.extend_from_slice(&MESSAGE_PREFIX[..]);
+        }
+        // message.extend_from_slice(&MESSAGE_PREFIX[..]);
         message.extend_from_slice(&order_struct_hash);
 
         let digest = keccak256(&message);
@@ -501,7 +522,7 @@ mod tests {
         let signer = PolySigner::new(PRIVATE_KEY, POLYGON);
         let builder = OrderBuilder::new(signer, Some(signature_type), Some(*SIGNER));
 
-        let signed = builder.sign_prepared_order(order);
+        let signed = builder.sign_prepared_order(order, true);
         let expected_signature = order_value["signature"].as_str().unwrap();
         assert_eq!(signed.signature, expected_signature);
     }

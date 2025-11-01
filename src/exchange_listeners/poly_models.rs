@@ -1,3 +1,5 @@
+use crate::config::RATE_LIMIT_WAIT_TIME;
+
 use super::orderbooks::poly_orderbook::OrderBook;
 use dashmap::DashMap;
 use serde::Deserialize;
@@ -6,6 +8,38 @@ use std::{
     fmt,
     sync::{Arc, Mutex, RwLock},
 };
+
+// 300 requests per 10 seconds
+#[derive(Debug, Clone)]
+pub struct RateLimit {
+    pub timestamp: u128,
+    pub wait_time: u32,
+}
+impl Default for RateLimit {
+    fn default() -> Self {
+        Self {
+            timestamp: 0,
+            wait_time: RATE_LIMIT_WAIT_TIME, // amount of milliseconds between requests
+        }
+    }
+}
+
+impl RateLimit {
+    pub fn should_wait(&self) -> bool {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        now - self.timestamp < self.wait_time as u128
+    }
+
+    pub fn update_timestamp(&mut self) {
+        self.timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Listener {
@@ -185,7 +219,7 @@ pub struct TradePayload {
     pub last_update: String,
     pub maker_orders: Vec<MakerOrder>,
     pub market: String,
-    #[serde(rename = "matchtime")]
+    #[serde(rename = "match_time")]
     pub match_time: String,
     pub outcome: String,
     pub owner: String,

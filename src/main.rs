@@ -1,10 +1,12 @@
 //main.rs
 pub mod clob_client;
+pub mod config;
 pub mod credentials;
 pub mod marketmaking;
 pub mod poly_orderbooks;
 pub mod popular_tokens;
 pub mod strategies;
+
 use itertools::Itertools;
 use strategies::{Strategy, UpdateOrderStrategy, UpdateOrderbookStrategy, UpdatePositionStrategy};
 
@@ -50,10 +52,15 @@ use tokio::runtime;
 
 use crate::{
     exchange_listeners::autodiscover_markets::autodiscover_market_config,
+    marketmaking::poly_market_struct::events_json_to_events_with_market_map,
     strategies::{
-        app_state_updates::update_crypto_orderbooks::UpdateCryptoOrderbookStrategy, custom::peter::peter_strategy::PeterStrategy, logging::{
-            bbo_logging::BBOLoggingStrategy, crypto_logging::CryptoLoggingStrategy, main_logging::MainLoggingStrategy, order_logging::OrderLoggingStrategy, position_logging::PositionLoggingStrategy
-        }
+        app_state_updates::update_crypto_orderbooks::UpdateCryptoOrderbookStrategy,
+        custom::peter::peter_strategy::PeterStrategy,
+        logging::{
+            bbo_logging::BBOLoggingStrategy, crypto_logging::CryptoLoggingStrategy,
+            main_logging::MainLoggingStrategy, order_logging::OrderLoggingStrategy,
+            position_logging::PositionLoggingStrategy,
+        },
     },
 };
 
@@ -73,8 +80,16 @@ fn main() {
 async fn debug_main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
+    let events = fetch_neg_risk_markets().await.unwrap();
+    let (events, market_map) = events_json_to_events_with_market_map(events);
+
     let app_state = Arc::new(AppState::default()); // Financial instruments
-    let polymarket_state = Arc::new(PolyMarketState::default()); // Orderbooks
+    let market_map = Arc::new(market_map); // put into Arc for sharing
+    let polymarket_state = Arc::new(PolyMarketState {
+        markets: Arc::clone(&market_map),
+        ..Default::default()
+    }); // Orderbooks
+
     let strategies: Vec<Arc<dyn Strategy>> = vec![
         Arc::new(UpdateOrderbookStrategy::new()),
         Arc::new(UpdateOrderStrategy::new()),
@@ -133,7 +148,7 @@ async fn debug_main() {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_millis();
-            println!("Pending events: {} - {}", counting_sender.pending(), now);
+            // println!("Pending events: {} - {}", counting_sender.pending(), now);
         }
     }
 }

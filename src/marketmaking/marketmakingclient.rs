@@ -8,13 +8,13 @@ use std::sync::Arc;
 lazy_static! {
     pub static ref CREDENTIALS: ApiCreds = ApiCreds {
         api_key: POLY_API_KEY.to_string(),
-        api_secret: POLY_API_PASSPHRASE.to_string(),
-        api_pass: POLY_API_SECRET.to_string(),
+        api_secret: POLY_API_SECRET.to_string(),
+        api_pass: POLY_API_PASSPHRASE.to_string(),
     };
     pub static ref CLIENT: Arc<ClobClient> = Arc::new(ClobClient::new(
         PRIVATE_KEY,
         CREDENTIALS.clone(),
-        Some(1),
+        Some(2),
         Some(*ADDRESS)
     ));
 }

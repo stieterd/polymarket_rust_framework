@@ -1,4 +1,4 @@
-pub const MAX_VOLUME: u32 = 10000;
+pub const MAX_VOLUME: u32 = 1000000;
 
 pub struct OrderBookContext {
     pub midpoint: u32,

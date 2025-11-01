@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use std::sync::Arc;
 
 use crate::{
@@ -18,13 +17,12 @@ impl UpdateOrderStrategy {
     }
 }
 
-#[async_trait]
 impl Strategy for UpdateOrderStrategy {
     fn name(&self) -> &'static str {
         "UpdateOrders"
     }
 
-    async fn poly_handle_user_order(
+    fn poly_handle_user_order(
         &self,
         _ctx: &crate::strategies::StrategyContext,
         _listener: Listener,
@@ -296,7 +294,7 @@ impl Strategy for UpdateOrderStrategy {
         }
     }
 
-    async fn poly_handle_user_trade(
+    fn poly_handle_user_trade(
         &self,
         _ctx: &crate::strategies::StrategyContext,
         _listener: Listener,

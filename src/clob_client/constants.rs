@@ -10,6 +10,8 @@ pub const POLYGON: u128 = 137;
 
 // pub const NEG_RISK_EXCHANGE: H160 = "0xC5d563A36AE78145C45a50134d48A1215220f80a".parse().unwrap();
 lazy_static! {
+    pub static ref EXCHANGE: H160 =
+        H160::from_str("0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E").unwrap();
     pub static ref NEG_RISK_EXCHANGE: H160 =
         H160::from_str("0xC5d563A36AE78145C45a50134d48A1215220f80a").unwrap();
 }

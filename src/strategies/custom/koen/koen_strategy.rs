@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use log::error;
 use std::sync::{Arc, RwLock};
 
@@ -22,13 +21,12 @@ impl KoenStrategy {
     }
 }
 
-#[async_trait]
 impl Strategy for KoenStrategy {
     fn name(&self) -> &'static str {
         "KoenStrategy"
     }
 
-    async fn poly_handle_market_price_change(
+    fn poly_handle_market_price_change(
         &self,
         _ctx: &StrategyContext,
         _listener: Listener,

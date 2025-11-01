@@ -1,10 +1,9 @@
-use async_trait::async_trait;
 use std::sync::{Arc, RwLock};
 
 use crate::{
     exchange_listeners::{
         orderbooks::poly_orderbook::OrderBook,
-        poly_models::{Listener, Position},
+        poly_models::{Listener, OrderSide, Position},
     },
     strategies::Strategy,
 };
@@ -19,13 +18,12 @@ impl UpdatePositionStrategy {
     }
 }
 
-#[async_trait]
 impl Strategy for UpdatePositionStrategy {
     fn name(&self) -> &'static str {
         "UpdatePositions"
     }
 
-    async fn poly_handle_user_trade(
+    fn poly_handle_user_trade(
         &self,
         _ctx: &crate::strategies::StrategyContext,
         _listener: Listener,
@@ -33,10 +31,26 @@ impl Strategy for UpdatePositionStrategy {
     ) {
         if let Ok(trade_size) = _payload.size.parse::<f64>() {
             let asset_id = _payload.asset_id.clone();
+            let side = match OrderSide::from_str(_payload.side.as_str()) {
+                Some(s) => s,
+                None => {
+                    warn!(
+                        "[{}] Unknown side '{}' for asset {}; skipping position update",
+                        self.name(),
+                        _payload.side,
+                        asset_id
+                    );
+                    return;
+                }
+            };
+            let signed_size = match side {
+                OrderSide::Buy => trade_size,
+                OrderSide::Sell => -trade_size,
+            };
             match _ctx.poly_state.positions.entry(asset_id.clone()) {
                 Entry::Occupied(mut entry) => {
                     if let Ok(mut position) = entry.get().write() {
-                        position.size += trade_size;
+                        position.size += signed_size;
                     } else {
                         warn!(
                             "[{}] Failed to write position lock for asset {}",
@@ -48,7 +62,7 @@ impl Strategy for UpdatePositionStrategy {
                 Entry::Vacant(entry) => {
                     entry.insert(Arc::new(RwLock::new(Position::new(
                         asset_id.clone(),
-                        trade_size,
+                        signed_size,
                     ))));
                 }
             }

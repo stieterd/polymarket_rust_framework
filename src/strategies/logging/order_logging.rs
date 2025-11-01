@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use log::info;
 
 use crate::{
@@ -19,13 +18,12 @@ impl OrderLoggingStrategy {
     }
 }
 
-#[async_trait]
 impl Strategy for OrderLoggingStrategy {
     fn name(&self) -> &'static str {
         "OrderLogger"
     }
 
-    async fn poly_handle_user_order(
+    fn poly_handle_user_order(
         &self,
         _ctx: &StrategyContext,
         _listener: Listener,
@@ -35,7 +33,7 @@ impl Strategy for OrderLoggingStrategy {
         for asset_entry in _ctx.poly_state.open_orders.iter() {
             let asset_id = asset_entry.key();
             let asset_orders = asset_entry.value();
-            
+
             // Iterate over bids
             for bid_entry in asset_orders.bids.iter() {
                 let (price, size) = *bid_entry.key();
@@ -51,7 +49,7 @@ impl Strategy for OrderLoggingStrategy {
                     );
                 }
             }
-            
+
             // Iterate over asks
             for ask_entry in asset_orders.asks.iter() {
                 let (price, size) = *ask_entry.key();

@@ -11,7 +11,6 @@ use crate::{
     },
     strategies::Strategy,
 };
-use async_trait::async_trait;
 
 pub struct UpdateCryptoOrderbookStrategy;
 
@@ -89,13 +88,12 @@ impl UpdateCryptoOrderbookStrategy {
     }
 }
 
-#[async_trait]
 impl Strategy for UpdateCryptoOrderbookStrategy {
     fn name(&self) -> &'static str {
         "UpdateCryptoOrderbooks"
     }
 
-    async fn crypto_handle_price_update(
+    fn crypto_handle_price_update(
         &self,
         _ctx: &crate::strategies::StrategyContext,
         _exchange: crate::exchange_listeners::Exchange,
@@ -131,7 +129,7 @@ impl Strategy for UpdateCryptoOrderbookStrategy {
         }
     }
 
-    async fn crypto_handle_l2_snapshot(
+    fn crypto_handle_l2_snapshot(
         &self,
         ctx: &crate::strategies::StrategyContext,
         exchange: crate::exchange_listeners::Exchange,
@@ -180,7 +178,7 @@ impl Strategy for UpdateCryptoOrderbookStrategy {
         }
     }
 
-    async fn crypto_handle_l2_update(
+    fn crypto_handle_l2_update(
         &self,
         ctx: &crate::strategies::StrategyContext,
         exchange: crate::exchange_listeners::Exchange,

@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use std::sync::{Arc, RwLock};
 
 use crate::{
@@ -17,13 +16,12 @@ impl UpdateOrderbookStrategy {
     }
 }
 
-#[async_trait]
 impl Strategy for UpdateOrderbookStrategy {
     fn name(&self) -> &'static str {
         "UpdateOrderbooks"
     }
 
-    async fn poly_handle_market_agg_orderbook(
+    fn poly_handle_market_agg_orderbook(
         &self,
         _ctx: &crate::strategies::StrategyContext,
         _listener: Listener,
@@ -36,7 +34,7 @@ impl Strategy for UpdateOrderbookStrategy {
             .insert(asset_id, Arc::new(RwLock::new(orderbook)));
     }
 
-    async fn poly_handle_market_price_change(
+    fn poly_handle_market_price_change(
         &self,
         _ctx: &crate::strategies::StrategyContext,
         _listener: crate::exchange_listeners::poly_models::Listener,
@@ -52,7 +50,7 @@ impl Strategy for UpdateOrderbookStrategy {
         }
     }
 
-    async fn poly_handle_market_tick_size_change(
+    fn poly_handle_market_tick_size_change(
         &self,
         _ctx: &crate::strategies::StrategyContext,
         _listener: Listener,

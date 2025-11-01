@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use log::info;
 
 use crate::{
@@ -19,13 +18,12 @@ impl PositionLoggingStrategy {
     }
 }
 
-#[async_trait]
 impl Strategy for PositionLoggingStrategy {
     fn name(&self) -> &'static str {
         "PositionLogger"
     }
 
-    async fn poly_handle_user_trade(
+    fn poly_handle_user_trade(
         &self,
         _ctx: &StrategyContext,
         _listener: Listener,
@@ -38,8 +36,7 @@ impl Strategy for PositionLoggingStrategy {
             if let Ok(position) = position_lock.read() {
                 info!(
                     "[PositionLogger] Asset: {}, Size: {}",
-                    asset_id,
-                    position.size
+                    asset_id, position.size
                 );
             } else {
                 info!(
