@@ -5,9 +5,7 @@ use crate::{
     exchange_listeners::{
         crypto_models::{
             CryptoPrice, CryptoPriceUpdate, get_crypto_orderbook_map, get_crypto_prices_map
-        },
-        orderbooks::{CryptoOrderbook, OrderbookDepth, OrderbookLevel, poly_orderbook::OrderBook},
-        poly_models::{LegacyPriceChange, Listener, PriceChange},
+        }, orderbooks::{CryptoOrderbook, OrderbookDepth, OrderbookLevel, poly_orderbook::OrderBook}, poly_client::PolyClient, poly_models::{LegacyPriceChange, Listener, PriceChange}
     },
     strategies::{Strategy, StrategyContext},
 };
@@ -60,7 +58,7 @@ impl Strategy for KoenStrategy {
                     return;
                 }
 
-                
+                let client = PolyClient;
 
                 let bids: Vec<(u32, u32)> = orderbook
                     .get_bid_map()

@@ -2,7 +2,7 @@ pub mod app_state_updates;
 pub mod logging;
 pub mod poly_state_updates;
 
-pub mod koen_strategy;
+pub mod custom;
 pub mod hourly_btc;
 pub mod pricing;
 pub mod strategy;

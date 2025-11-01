@@ -188,6 +188,10 @@ impl OrderBook {
         self.tick_size = new_tick_size;
     }
 
+    pub fn get_tick_size(&self) -> &str {
+        &self.tick_size
+    }
+
     pub fn best_bid(&self) -> Option<(u32, u32)> {
         self.rebuild_bid_heap_if_dirty();
         self.bid_heap.lock().unwrap().peek().copied()
@@ -196,6 +200,26 @@ impl OrderBook {
     pub fn best_ask(&self) -> Option<(u32, u32)> {
         self.rebuild_ask_heap_if_dirty();
         self.ask_heap.lock().unwrap().peek().map(|r| r.0)
+    }
+
+    pub fn get_midpoint(&self) -> u32 {
+        let best_bid = self.best_bid();
+        let best_ask = self.best_ask();
+        if let (Some((bid_price, _)), Some((ask_price, _))) = (best_bid, best_ask) {
+            (bid_price + ask_price) / 2
+        } else {
+            0
+        }
+    }
+
+    pub fn get_spread(&self) -> u32 {
+        let best_bid = self.best_bid();
+        let best_ask = self.best_ask();
+        if let (Some((bid_price, _)), Some((ask_price, _))) = (best_bid, best_ask) {
+            ask_price - bid_price
+        } else {
+            0
+        }
     }
 
     pub fn best_feasible_bid(&self) -> Option<(u32, u32)> {

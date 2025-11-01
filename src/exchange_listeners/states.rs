@@ -11,7 +11,6 @@ pub struct PolyMarketState {
     pub orderbooks: Arc<DashMap<String, Arc<RwLock<OrderBook>>>>,
     pub positions: Arc<DashMap<String, Arc<RwLock<Position>>>>,
     pub open_orders: Arc<DashMap<String, AssetOrders>>,
-    pub poly_client: Arc<PolyClient>
 }
 
 /// The main application state, holding final, converted USDT prices.
