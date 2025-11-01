@@ -1,17 +1,26 @@
-use std::{collections::VecDeque, sync::{Arc, RwLock, Mutex}};
+use async_trait::async_trait;
 use log::error;
+use std::{
+    collections::VecDeque,
+    sync::{Arc, Mutex, RwLock},
+};
 
 use crate::{
     exchange_listeners::{
         crypto_models::{
-            CryptoPrice, CryptoPriceUpdate, get_crypto_orderbook_map, get_crypto_prices_map
-        }, orderbooks::{CryptoOrderbook, OrderbookDepth, OrderbookLevel, poly_orderbook::OrderBook}, poly_client::PolyClient, poly_models::{LegacyPriceChange, Listener, OrderSide, PriceChange}
+            get_crypto_orderbook_map, get_crypto_prices_map, CryptoPrice, CryptoPriceUpdate,
+        },
+        orderbooks::{poly_orderbook::OrderBook, CryptoOrderbook, OrderbookDepth, OrderbookLevel},
+        poly_client::PolyClient,
+        poly_models::{LegacyPriceChange, Listener, OrderSide, PriceChange},
     },
-    strategies::{Strategy, StrategyContext, custom::peter::models::{MAX_VOLUME, OrderBookContext}},
+    strategies::{
+        custom::peter::models::{OrderBookContext, MAX_VOLUME},
+        Strategy, StrategyContext,
+    },
 };
 
-pub struct PeterStrategy
-{
+pub struct PeterStrategy {
     orderbook_context_queue: Mutex<std::collections::VecDeque<OrderBookContext>>,
 }
 
@@ -23,6 +32,7 @@ impl PeterStrategy {
     }
 }
 
+#[async_trait]
 impl Strategy for PeterStrategy {
     fn name(&self) -> &'static str {
         "PeterStrategy"
@@ -35,6 +45,8 @@ impl Strategy for PeterStrategy {
         _payload: &PriceChange,
     ) {
         let asset_id = &_payload.asset_id;
+
+        let mut order_to_place: Option<(u32, u32, String)> = None;
 
         if let Some(orderbook_entry) = _ctx.poly_state.orderbooks.get(asset_id) {
             if let Ok(orderbook) = orderbook_entry.read() {
@@ -63,22 +75,6 @@ impl Strategy for PeterStrategy {
                 if !matches_best {
                     return;
                 }
-                
-                let client = PolyClient;
-
-                let bids: Vec<(u32, u32)> = orderbook
-                    .get_bid_map()
-                    .iter()
-                    .map(|entry| (*entry.key(), *entry.value()))
-                    .collect();
-                let asks: Vec<(u32, u32)> = orderbook
-                    .get_ask_map()
-                    .iter()
-                    .map(|entry| (*entry.key(), *entry.value()))
-                    .collect();
-
-
-                // There has been a change in best bid or best ask below
 
                 // Collect Orderbook Context in our queue
                 let orderbook_context = OrderBookContext {
@@ -88,18 +84,36 @@ impl Strategy for PeterStrategy {
 
                 if let Ok(mut queue) = self.orderbook_context_queue.lock() {
                     queue.push_back(orderbook_context);
+                    while queue.len() > 1000 {
+                        queue.pop_front();
+                    }
                 }
 
-                let tick_size = orderbook.get_tick_size();
-
-                // If volume of best ask is less than MAX_VOLUME
-                if best_ask.unwrap().1 < MAX_VOLUME {
-                    // we trade here
-                    PolyClient::place_limit_order(&_ctx.poly_state, asset_id, OrderSide::Buy, best_ask.unwrap().0, best_ask.unwrap().1, tick_size).await;
+                if let Some((ask_price, ask_size)) = best_ask {
+                    if ask_size < MAX_VOLUME {
+                        order_to_place =
+                            Some((ask_price, ask_size, orderbook.get_tick_size().to_string()));
+                    }
                 }
+            }
+        }
 
+        if let Some((price, size, tick_size)) = order_to_place {
+            if let Err(err) = PolyClient::place_limit_order(
+                &_ctx.poly_state,
+                asset_id,
+                OrderSide::Buy,
+                price,
+                size,
+                tick_size.as_str(),
+            )
+            .await
+            {
+                error!(
+                    "[PeterStrategy] Failed to place limit order for {} at {}x{}: {}",
+                    asset_id, price, size, err
+                );
             }
         }
     }
-
 }

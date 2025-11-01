@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use std::sync::{Arc, RwLock};
 
 use crate::{
@@ -13,12 +14,13 @@ impl HourlyBtcStrategy {
     }
 }
 
+#[async_trait]
 impl Strategy for HourlyBtcStrategy {
     fn name(&self) -> &'static str {
         "UpdateOrderbooks"
     }
 
-    fn poly_handle_market_agg_orderbook(
+    async fn poly_handle_market_agg_orderbook(
         &self,
         _ctx: &crate::strategies::StrategyContext,
         _listener: Listener,
@@ -26,7 +28,7 @@ impl Strategy for HourlyBtcStrategy {
     ) {
     }
 
-    fn poly_handle_market_price_change(
+    async fn poly_handle_market_price_change(
         &self,
         _ctx: &crate::strategies::StrategyContext,
         _listener: crate::exchange_listeners::poly_models::Listener,

@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use log::error;
 use serde_json::{json, Map, Value};
 use std::fs::{self, OpenOptions};
@@ -14,12 +15,13 @@ use crate::Strategy;
 #[derive(Default)]
 pub struct CryptoLoggingStrategy;
 
+#[async_trait]
 impl Strategy for CryptoLoggingStrategy {
     fn name(&self) -> &'static str {
         "CryptoLogging"
     }
 
-    fn crypto_handle_price_update(
+    async fn crypto_handle_price_update(
         &self,
         ctx: &crate::strategies::StrategyContext,
         exchange: Exchange,
@@ -55,7 +57,7 @@ impl Strategy for CryptoLoggingStrategy {
     }
 
     // ADDED: This function will now log the initial state received from Kraken.
-    fn crypto_handle_l2_snapshot(
+    async fn crypto_handle_l2_snapshot(
         &self,
         ctx: &crate::strategies::StrategyContext,
         exchange: Exchange,
@@ -85,7 +87,7 @@ impl Strategy for CryptoLoggingStrategy {
         }
     }
 
-    fn crypto_handle_l2_update(
+    async fn crypto_handle_l2_update(
         &self,
         ctx: &crate::strategies::StrategyContext,
         exchange: Exchange,

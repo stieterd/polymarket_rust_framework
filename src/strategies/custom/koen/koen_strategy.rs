@@ -1,11 +1,15 @@
-use std::{sync::{Arc, RwLock}};
+use async_trait::async_trait;
 use log::error;
+use std::sync::{Arc, RwLock};
 
 use crate::{
     exchange_listeners::{
         crypto_models::{
-            CryptoPrice, CryptoPriceUpdate, get_crypto_orderbook_map, get_crypto_prices_map
-        }, orderbooks::{CryptoOrderbook, OrderbookDepth, OrderbookLevel, poly_orderbook::OrderBook}, poly_client::PolyClient, poly_models::{LegacyPriceChange, Listener, PriceChange}
+            get_crypto_orderbook_map, get_crypto_prices_map, CryptoPrice, CryptoPriceUpdate,
+        },
+        orderbooks::{poly_orderbook::OrderBook, CryptoOrderbook, OrderbookDepth, OrderbookLevel},
+        poly_client::PolyClient,
+        poly_models::{LegacyPriceChange, Listener, PriceChange},
     },
     strategies::{Strategy, StrategyContext},
 };
@@ -18,12 +22,13 @@ impl KoenStrategy {
     }
 }
 
+#[async_trait]
 impl Strategy for KoenStrategy {
     fn name(&self) -> &'static str {
         "KoenStrategy"
     }
 
-    fn poly_handle_market_price_change(
+    async fn poly_handle_market_price_change(
         &self,
         _ctx: &StrategyContext,
         _listener: Listener,
@@ -73,5 +78,4 @@ impl Strategy for KoenStrategy {
             }
         }
     }
-
 }

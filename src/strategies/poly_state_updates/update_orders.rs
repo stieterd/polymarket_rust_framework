@@ -1,9 +1,12 @@
+use async_trait::async_trait;
 use std::sync::Arc;
 
 use crate::{
-    credentials, exchange_listeners::poly_models::{
+    credentials,
+    exchange_listeners::poly_models::{
         Listener, OrderEventType, OrderSide, TradeRole, TradeStatus,
-    }, strategies::Strategy
+    },
+    strategies::Strategy,
 };
 use log::{info, warn};
 
@@ -15,12 +18,13 @@ impl UpdateOrderStrategy {
     }
 }
 
+#[async_trait]
 impl Strategy for UpdateOrderStrategy {
     fn name(&self) -> &'static str {
         "UpdateOrders"
     }
 
-    fn poly_handle_user_order(
+    async fn poly_handle_user_order(
         &self,
         _ctx: &crate::strategies::StrategyContext,
         _listener: Listener,
@@ -41,7 +45,7 @@ impl Strategy for UpdateOrderStrategy {
             owner,
             size_matched,
             timestamp,
-            status
+            status,
         } = &_payload;
 
         let price_u32 = match price.parse::<f64>() {
@@ -154,9 +158,8 @@ impl Strategy for UpdateOrderStrategy {
                 //     price,
                 //     original_size
                 // );
-                
-                if status.eq_ignore_ascii_case("LIVE"){
 
+                if status.eq_ignore_ascii_case("LIVE") {
                     let order_arc_opt = _ctx
                         .poly_state
                         .open_orders
@@ -179,7 +182,7 @@ impl Strategy for UpdateOrderStrategy {
                                 .get(&(price_u32, size_u32))
                                 .map(|entry| Arc::clone(entry.value()))
                         });
-                
+
                     if let Some(order_arc) = order_arc_opt {
                         match order_arc.lock() {
                             Ok(mut order) => {
@@ -198,8 +201,7 @@ impl Strategy for UpdateOrderStrategy {
                             }
                         }
                     }
-                }
-                else if status.eq_ignore_ascii_case("MATCHED"){
+                } else if status.eq_ignore_ascii_case("MATCHED") {
                     if let Some(asset_orders) = _ctx.poly_state.open_orders.get_mut(asset_id) {
                         match OrderSide::from_str(side.as_str()) {
                             Some(OrderSide::Buy) => {
@@ -294,7 +296,7 @@ impl Strategy for UpdateOrderStrategy {
         }
     }
 
-    fn poly_handle_user_trade(
+    async fn poly_handle_user_trade(
         &self,
         _ctx: &crate::strategies::StrategyContext,
         _listener: Listener,
@@ -390,7 +392,6 @@ impl Strategy for UpdateOrderStrategy {
                 //     _payload.price,
                 //     _payload.size
                 // );
-                
             }
             TradeRole::Unknown => {
                 warn!(

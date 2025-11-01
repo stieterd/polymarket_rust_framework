@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use std::sync::Arc;
 
 use crate::exchange_listeners::crypto_models::{CryptoPriceUpdate, RateKind};
@@ -25,11 +26,12 @@ impl StrategyContext {
     }
 }
 
+#[async_trait]
 pub trait Strategy: Send + Sync {
     fn name(&self) -> &'static str;
 
     // Gets called by market socket on a market trade
-    fn poly_handle_market_agg_orderbook(
+    async fn poly_handle_market_agg_orderbook(
         &self,
         _ctx: &StrategyContext,
         _listener: Listener,
@@ -38,7 +40,7 @@ pub trait Strategy: Send + Sync {
     }
 
     // Gets called by market socket on a new limit order placement
-    fn poly_handle_market_price_change(
+    async fn poly_handle_market_price_change(
         &self,
         _ctx: &StrategyContext,
         _listener: Listener,
@@ -47,7 +49,7 @@ pub trait Strategy: Send + Sync {
     }
 
     // Gets called by market socket whenever the tick size changes
-    fn poly_handle_market_tick_size_change(
+    async fn poly_handle_market_tick_size_change(
         &self,
         _ctx: &StrategyContext,
         _listener: Listener,
@@ -56,13 +58,13 @@ pub trait Strategy: Send + Sync {
     }
 
     // Gets called by market socket on a pong message
-    fn poly_handle_market_pong(&self, _ctx: &StrategyContext, _listener: Listener) {}
+    async fn poly_handle_market_pong(&self, _ctx: &StrategyContext, _listener: Listener) {}
 
     // Gets called by user socket on a pong message
-    fn poly_handle_user_pong(&self, _ctx: &StrategyContext, _listener: Listener) {}
+    async fn poly_handle_user_pong(&self, _ctx: &StrategyContext, _listener: Listener) {}
 
     // Gets called by user socket on a new trade message
-    fn poly_handle_user_trade(
+    async fn poly_handle_user_trade(
         &self,
         _ctx: &StrategyContext,
         _listener: Listener,
@@ -71,7 +73,7 @@ pub trait Strategy: Send + Sync {
     }
 
     // Gets called by user socket on a new placed order message [LIVE, CANCELLED]
-    fn poly_handle_user_order(
+    async fn poly_handle_user_order(
         &self,
         _ctx: &StrategyContext,
         _listener: Listener,
@@ -79,7 +81,7 @@ pub trait Strategy: Send + Sync {
     ) {
     }
 
-    fn crypto_handle_price_update(
+    async fn crypto_handle_price_update(
         &self,
         _ctx: &StrategyContext,
         _exchange: Exchange,
@@ -90,7 +92,7 @@ pub trait Strategy: Send + Sync {
     ) {
     }
 
-    fn crypto_handle_l2_snapshot(
+    async fn crypto_handle_l2_snapshot(
         &self,
         _ctx: &StrategyContext,
         _exchange: Exchange,
@@ -101,7 +103,7 @@ pub trait Strategy: Send + Sync {
     ) {
     }
 
-    fn crypto_handle_l2_update(
+    async fn crypto_handle_l2_update(
         &self,
         _ctx: &StrategyContext,
         _exchange: Exchange,
@@ -112,7 +114,7 @@ pub trait Strategy: Send + Sync {
     ) {
     }
 
-    fn crypto_handle_price_clear(
+    async fn crypto_handle_price_clear(
         &self,
         _ctx: &StrategyContext,
         _exchange: Exchange,

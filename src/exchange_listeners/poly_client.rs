@@ -33,16 +33,8 @@ impl PolyClient {
         let price_dec = price as f64 / 1000.0;
         let size_dec = size as f64 / 1000.0;
 
-        let local_order = Self::record_order(
-            poly_state,
-            asset_id,
-            side,
-            price,
-            size,
-            0,
-            None,
-        )
-        .ok_or_else(|| "order already exists".to_string())?;
+        let local_order = Self::record_order(poly_state, asset_id, side, price, size, 0, None)
+            .ok_or_else(|| "order already exists".to_string())?;
 
         let order_args = OrderArgs::new(
             asset_id,
@@ -62,8 +54,12 @@ impl PolyClient {
                     .get("orderID")
                     .and_then(Value::as_str)
                     .map(str::to_owned)
-                    .or_else(|| posted_order.get("orderId").and_then(Value::as_str).map(str::to_owned))
-                {
+                    .or_else(|| {
+                        posted_order
+                            .get("orderId")
+                            .and_then(Value::as_str)
+                            .map(str::to_owned)
+                    }) {
                     Some(id) => id,
                     None => {
                         Self::remove_order_entry(poly_state, asset_id, side, price, size);
@@ -215,7 +211,6 @@ impl PolyClient {
                 }
 
                 return None;
-
             } else {
                 book.insert(order_key, Arc::clone(&order));
             }

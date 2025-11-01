@@ -1,15 +1,12 @@
 //main.rs
 pub mod clob_client;
 pub mod credentials;
-pub mod popular_tokens;
 pub mod marketmaking;
 pub mod poly_orderbooks;
+pub mod popular_tokens;
 pub mod strategies;
 use itertools::Itertools;
-use strategies::{
-    Strategy, UpdateOrderStrategy, UpdateOrderbookStrategy,
-    UpdatePositionStrategy,
-};
+use strategies::{Strategy, UpdateOrderStrategy, UpdateOrderbookStrategy, UpdatePositionStrategy};
 
 use clob_client::{
     client::ClobClient,
@@ -53,7 +50,13 @@ use tokio::runtime;
 
 use crate::{
     exchange_listeners::autodiscover_markets::autodiscover_market_config,
-    strategies::{app_state_updates::update_crypto_orderbooks::UpdateCryptoOrderbookStrategy, logging::{bbo_logging::BBOLoggingStrategy, crypto_logging::CryptoLoggingStrategy, main_logging::MainLoggingStrategy}},
+    strategies::{
+        app_state_updates::update_crypto_orderbooks::UpdateCryptoOrderbookStrategy,
+        logging::{
+            bbo_logging::BBOLoggingStrategy, crypto_logging::CryptoLoggingStrategy,
+            main_logging::MainLoggingStrategy,
+        },
+    },
 };
 
 fn main() {
@@ -82,7 +85,6 @@ async fn debug_main() {
         Arc::new(BBOLoggingStrategy::new()),
         // Arc::new(MainLoggingStrategy::new()),
         // Arc::new(CryptoLoggingStrategy),
-
     ];
     let counting_sender = event_processor::spawn_event_processor(
         Arc::clone(&app_state),
@@ -131,7 +133,6 @@ async fn debug_main() {
                 .unwrap()
                 .as_millis();
             println!("Pending events: {} - {}", counting_sender.pending(), now);
-
         }
     }
 }

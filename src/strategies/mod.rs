@@ -9,6 +9,6 @@ pub mod strategy;
 
 pub use poly_state_updates::{
     update_orderbooks::UpdateOrderbookStrategy, update_orders::UpdateOrderStrategy,
-    update_positions::UpdatePositionStrategy
+    update_positions::UpdatePositionStrategy,
 };
 pub use strategy::{Strategy, StrategyContext};

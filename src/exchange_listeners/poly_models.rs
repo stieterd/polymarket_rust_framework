@@ -309,7 +309,7 @@ pub struct OrderPayload {
     pub original_size: String,
     pub size_matched: String,
     pub timestamp: String,
-    pub status: String
+    pub status: String,
 }
 
 #[derive(Debug, Clone)]

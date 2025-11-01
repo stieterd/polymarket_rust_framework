@@ -111,7 +111,7 @@ pub fn spawn_event_processor(
 
     tokio::spawn(async move {
         while let Some(event) = rx.recv().await {
-            processor.handle_event(event);
+            processor.handle_event(event).await;
             pending_clone.fetch_sub(1, Ordering::SeqCst);
         }
     });
@@ -129,12 +129,14 @@ struct EventProcessor {
 }
 
 impl EventProcessor {
-    fn handle_event(&self, event: SocketEvent) {
+    async fn handle_event(&self, event: SocketEvent) {
         match event {
             SocketEvent::Market { listener, payload } => {
-                self.handle_market_event(listener, payload)
+                self.handle_market_event(listener, payload).await
             }
-            SocketEvent::User { listener, payload } => self.handle_user_event(listener, payload),
+            SocketEvent::User { listener, payload } => {
+                self.handle_user_event(listener, payload).await
+            }
             SocketEvent::Rate {
                 source,
                 kind,
@@ -147,26 +149,35 @@ impl EventProcessor {
                 crypto,
                 depth,
                 price_update,
-            } => self.handle_price_update(exchange, instrument, crypto, depth, &price_update),
+            } => {
+                self.handle_price_update(exchange, instrument, crypto, depth, &price_update)
+                    .await
+            }
             SocketEvent::L2Snapshot {
                 exchange,
                 instrument,
                 crypto,
                 bids,
                 asks,
-            } => self.handle_l2_snapshot(exchange, instrument, crypto, &bids, &asks),
+            } => {
+                self.handle_l2_snapshot(exchange, instrument, crypto, &bids, &asks)
+                    .await
+            }
             SocketEvent::L2Update {
                 exchange,
                 instrument,
                 crypto,
                 bids,
                 asks,
-            } => self.handle_l2_update(exchange, instrument, crypto, &bids, &asks),
+            } => {
+                self.handle_l2_update(exchange, instrument, crypto, &bids, &asks)
+                    .await
+            }
             SocketEvent::ClearPrice {
                 exchange,
                 instrument,
                 crypto,
-            } => self.handle_price_clear(exchange, instrument, crypto),
+            } => self.handle_price_clear(exchange, instrument, crypto).await,
         }
     }
 
@@ -174,7 +185,7 @@ impl EventProcessor {
         StrategyContext::new(Arc::clone(&self.app_state), Arc::clone(&self.poly_state))
     }
 
-    fn handle_price_update(
+    async fn handle_price_update(
         &self,
         exchange: Exchange,
         instrument: Instrument,
@@ -185,18 +196,13 @@ impl EventProcessor {
         let ctx = self.strategy_context();
 
         for strategy in &self.strategies {
-            strategy.crypto_handle_price_update(
-                &ctx,
-                exchange,
-                instrument,
-                crypto,
-                depth,
-                price_update,
-            );
+            strategy
+                .crypto_handle_price_update(&ctx, exchange, instrument, crypto, depth, price_update)
+                .await;
         }
     }
 
-    fn handle_l2_snapshot(
+    async fn handle_l2_snapshot(
         &self,
         exchange: Exchange,
         instrument: Instrument,
@@ -206,11 +212,13 @@ impl EventProcessor {
     ) {
         let ctx = self.strategy_context();
         for strategy in &self.strategies {
-            strategy.crypto_handle_l2_snapshot(&ctx, exchange, instrument, crypto, bids, asks);
+            strategy
+                .crypto_handle_l2_snapshot(&ctx, exchange, instrument, crypto, bids, asks)
+                .await;
         }
     }
 
-    fn handle_l2_update(
+    async fn handle_l2_update(
         &self,
         exchange: Exchange,
         instrument: Instrument,
@@ -220,11 +228,13 @@ impl EventProcessor {
     ) {
         let ctx = self.strategy_context();
         for strategy in &self.strategies {
-            strategy.crypto_handle_l2_update(&ctx, exchange, instrument, crypto, bids, asks);
+            strategy
+                .crypto_handle_l2_update(&ctx, exchange, instrument, crypto, bids, asks)
+                .await;
         }
     }
 
-    fn handle_price_clear(&self, exchange: Exchange, instrument: Instrument, crypto: Crypto) {
+    async fn handle_price_clear(&self, exchange: Exchange, instrument: Instrument, crypto: Crypto) {
         let map = get_crypto_orderbook_map(Arc::clone(&self.app_state), crypto);
         let mut depths = Vec::new();
         if map
@@ -244,13 +254,15 @@ impl EventProcessor {
             let ctx = self.strategy_context();
             for depth in depths {
                 for strategy in &self.strategies {
-                    strategy.crypto_handle_price_clear(&ctx, exchange, instrument, crypto, depth);
+                    strategy
+                        .crypto_handle_price_clear(&ctx, exchange, instrument, crypto, depth)
+                        .await;
                 }
             }
         }
     }
 
-    fn handle_market_event(&self, listener: Listener, mut payload: Vec<u8>) {
+    async fn handle_market_event(&self, listener: Listener, mut payload: Vec<u8>) {
         if payload.is_empty() {
             return;
         }
@@ -260,7 +272,7 @@ impl EventProcessor {
                 if t.eq_ignore_ascii_case("PONG") {
                     let ctx = self.strategy_context();
                     for strategy in &self.strategies {
-                        strategy.poly_handle_market_pong(&ctx, listener);
+                        strategy.poly_handle_market_pong(&ctx, listener).await;
                     }
                     return;
                 }
@@ -276,7 +288,7 @@ impl EventProcessor {
                     ) {
                         Ok(wrappers) => {
                             for w in wrappers {
-                                self.dispatch_market_message_legacy(listener, w);
+                                self.dispatch_market_message_legacy(listener, w).await;
                             }
                         }
                         Err(e) => error!(
@@ -292,7 +304,7 @@ impl EventProcessor {
                     match simd_json::from_slice::<PolymarketMessageWrapperOld>(
                         payload.as_mut_slice(),
                     ) {
-                        Ok(w) => self.dispatch_market_message_legacy(listener, w),
+                        Ok(w) => self.dispatch_market_message_legacy(listener, w).await,
                         Err(e) => error!(
                             "[{}] Failed to parse legacy market message wrapper: {}. Raw: {}",
                             listener,
@@ -307,7 +319,7 @@ impl EventProcessor {
 
         match simd_json::from_slice::<PolymarketMessageWrapper>(payload.as_mut_slice()) {
             Ok(wrapper) => {
-                self.dispatch_market_message(listener, wrapper);
+                self.dispatch_market_message(listener, wrapper).await;
             }
             Err(e) => error!(
                 "[{}] Failed to parse market message wrapper: {}. Raw: {}",
@@ -318,13 +330,13 @@ impl EventProcessor {
         }
     }
 
-    fn handle_user_event(&self, listener: Listener, mut payload: Vec<u8>) {
+    async fn handle_user_event(&self, listener: Listener, mut payload: Vec<u8>) {
         if let Ok(s) = str::from_utf8(&payload) {
             let t = s.trim();
             if t.eq_ignore_ascii_case("PONG") {
                 let ctx = self.strategy_context();
                 for strategy in &self.strategies {
-                    strategy.poly_handle_user_pong(&ctx, listener);
+                    strategy.poly_handle_user_pong(&ctx, listener).await;
                 }
                 return;
             }
@@ -334,11 +346,11 @@ impl EventProcessor {
             Ok(v) => match v {
                 OwnedValue::Array(events) => {
                     for event in events.into_iter() {
-                        self.dispatch_user_event(listener, event);
+                        self.dispatch_user_event(listener, event).await;
                     }
                 }
                 event => {
-                    self.dispatch_user_event(listener, event);
+                    self.dispatch_user_event(listener, event).await;
                 }
             },
             Err(e) => error!(
@@ -350,15 +362,18 @@ impl EventProcessor {
         }
     }
 
-    fn dispatch_market_message(&self, listener: Listener, wrapper: PolymarketMessageWrapper) {
+    async fn dispatch_market_message(&self, listener: Listener, wrapper: PolymarketMessageWrapper) {
         match wrapper.msg_type.as_str() {
-            "agg_orderbook" => self.handle_agg_orderbook(listener, wrapper.payload),
-            "price_change" => self.handle_price_change(listener, wrapper.payload),
-            "tick_size_change" => self.handle_tick_size_change(listener, wrapper.payload),
+            "agg_orderbook" => self.handle_agg_orderbook(listener, wrapper.payload).await,
+            "price_change" => self.handle_price_change(listener, wrapper.payload).await,
+            "tick_size_change" => {
+                self.handle_tick_size_change(listener, wrapper.payload)
+                    .await
+            }
             "pong" => {
                 let ctx = self.strategy_context();
                 for strategy in &self.strategies {
-                    strategy.poly_handle_market_pong(&ctx, listener);
+                    strategy.poly_handle_market_pong(&ctx, listener).await;
                 }
             }
             unknown_type => warn!(
@@ -370,15 +385,15 @@ impl EventProcessor {
         }
     }
 
-    fn dispatch_market_message_legacy(
+    async fn dispatch_market_message_legacy(
         &self,
         listener: Listener,
         wrapper: PolymarketMessageWrapperOld,
     ) {
         match wrapper.event_type.as_str() {
-            "price_change" => self.handle_price_change_legacy(listener, wrapper),
-            "book" => self.handle_book_legacy(listener, wrapper),
-            "tick_size_change" => self.handle_tick_size_change_legacy(listener, wrapper),
+            "price_change" => self.handle_price_change_legacy(listener, wrapper).await,
+            "book" => self.handle_book_legacy(listener, wrapper).await,
+            "tick_size_change" => self.handle_tick_size_change_legacy(listener, wrapper).await,
             "last_trade_price" => {}
             other => warn!(
                 "[{}] Unhandled legacy market message type '{}': {:?}",
@@ -389,7 +404,7 @@ impl EventProcessor {
         }
     }
 
-    fn dispatch_user_event(&self, listener: Listener, event: OwnedValue) {
+    async fn dispatch_user_event(&self, listener: Listener, event: OwnedValue) {
         let event_type = event
             .get("event_type")
             .and_then(|v| v.as_str())
@@ -397,10 +412,10 @@ impl EventProcessor {
             .map(|s| s.to_ascii_lowercase());
         match event_type.as_deref() {
             Some("trade") => {
-                self.handle_trade(listener, event);
+                self.handle_trade(listener, event).await;
             }
             Some("order") => {
-                self.handle_order(listener, event);
+                self.handle_order(listener, event).await;
             }
             Some(other) => debug!("[{}] Unhandled user event type: {}", listener, other),
             None => debug!("[{}] User event missing type field", listener),
@@ -417,7 +432,7 @@ impl EventProcessor {
     //     }
     // }
 
-    fn handle_agg_orderbook(&self, listener: Listener, payload: OwnedValue) {
+    async fn handle_agg_orderbook(&self, listener: Listener, payload: OwnedValue) {
         let ctx = self.strategy_context();
         if let Ok(snapshots) =
             simd_json::serde::from_owned_value::<Vec<AggOrderbook>>(payload.clone())
@@ -426,7 +441,9 @@ impl EventProcessor {
                 // self.ensure_poly_orderbook(&snapshot);
 
                 for strategy in &self.strategies {
-                    strategy.poly_handle_market_agg_orderbook(&ctx, listener, &snapshot);
+                    strategy
+                        .poly_handle_market_agg_orderbook(&ctx, listener, &snapshot)
+                        .await;
                 }
             }
         } else if let Ok(snapshot) =
@@ -435,7 +452,9 @@ impl EventProcessor {
             // self.ensure_poly_orderbook(&snapshot);
 
             for strategy in &self.strategies {
-                strategy.poly_handle_market_agg_orderbook(&ctx, listener, &snapshot);
+                strategy
+                    .poly_handle_market_agg_orderbook(&ctx, listener, &snapshot)
+                    .await;
             }
         } else {
             warn!(
@@ -445,11 +464,12 @@ impl EventProcessor {
         }
     }
 
-    fn handle_price_change(&self, listener: Listener, payload: OwnedValue) {
+    async fn handle_price_change(&self, listener: Listener, payload: OwnedValue) {
         if let Ok(payload_data) =
             simd_json::serde::from_owned_value::<PriceChangePayload>(payload.clone())
         {
-            self.process_price_change_payload(listener, payload_data);
+            self.process_price_change_payload(listener, payload_data)
+                .await;
         } else {
             warn!(
                 "[PolyMarket] Failed to parse price_change payload. Raw: {}",
@@ -458,7 +478,11 @@ impl EventProcessor {
         }
     }
 
-    fn handle_price_change_legacy(&self, listener: Listener, wrapper: PolymarketMessageWrapperOld) {
+    async fn handle_price_change_legacy(
+        &self,
+        listener: Listener,
+        wrapper: PolymarketMessageWrapperOld,
+    ) {
         let PolymarketMessageWrapperOld {
             timestamp,
             price_changes,
@@ -494,21 +518,29 @@ impl EventProcessor {
                 side: change.side.clone(),
             };
             for strategy in &self.strategies {
-                strategy.poly_handle_market_price_change(&ctx, listener, &pc);
+                strategy
+                    .poly_handle_market_price_change(&ctx, listener, &pc)
+                    .await;
             }
         }
     }
 
-    fn process_price_change_payload(&self, listener: Listener, payload_data: PriceChangePayload) {
+    async fn process_price_change_payload(
+        &self,
+        listener: Listener,
+        payload_data: PriceChangePayload,
+    ) {
         let ctx = self.strategy_context();
         for change in &payload_data.pc {
             for strategy in &self.strategies {
-                strategy.poly_handle_market_price_change(&ctx, listener, change);
+                strategy
+                    .poly_handle_market_price_change(&ctx, listener, change)
+                    .await;
             }
         }
     }
 
-    fn handle_book_legacy(&self, listener: Listener, wrapper: PolymarketMessageWrapperOld) {
+    async fn handle_book_legacy(&self, listener: Listener, wrapper: PolymarketMessageWrapperOld) {
         let PolymarketMessageWrapperOld {
             timestamp,
             market,
@@ -535,11 +567,13 @@ impl EventProcessor {
 
         let ctx = self.strategy_context();
         for strategy in &self.strategies {
-            strategy.poly_handle_market_agg_orderbook(&ctx, listener, &snapshot);
+            strategy
+                .poly_handle_market_agg_orderbook(&ctx, listener, &snapshot)
+                .await;
         }
     }
 
-    fn handle_tick_size_change(&self, listener: Listener, payload: OwnedValue) {
+    async fn handle_tick_size_change(&self, listener: Listener, payload: OwnedValue) {
         if let Ok(payload_data) =
             simd_json::serde::from_owned_value::<TickSizeChangePayload>(payload.clone())
         {
@@ -551,7 +585,9 @@ impl EventProcessor {
 
             let ctx = self.strategy_context();
             for strategy in &self.strategies {
-                strategy.poly_handle_market_tick_size_change(&ctx, listener, &payload_data);
+                strategy
+                    .poly_handle_market_tick_size_change(&ctx, listener, &payload_data)
+                    .await;
             }
         } else {
             warn!(
@@ -561,7 +597,7 @@ impl EventProcessor {
         }
     }
 
-    fn handle_tick_size_change_legacy(
+    async fn handle_tick_size_change_legacy(
         &self,
         listener: Listener,
         payload: PolymarketMessageWrapperOld,
@@ -573,15 +609,19 @@ impl EventProcessor {
 
         let ctx = self.strategy_context();
         for strategy in &self.strategies {
-            strategy.poly_handle_market_tick_size_change(&ctx, listener, &ticksize_pl);
+            strategy
+                .poly_handle_market_tick_size_change(&ctx, listener, &ticksize_pl)
+                .await;
         }
     }
 
-    fn handle_trade(&self, listener: Listener, payload: OwnedValue) {
+    async fn handle_trade(&self, listener: Listener, payload: OwnedValue) {
         if let Ok(trade) = simd_json::serde::from_owned_value::<TradePayload>(payload.clone()) {
             let ctx = self.strategy_context();
             for strategy in &self.strategies {
-                strategy.poly_handle_user_trade(&ctx, listener, &trade);
+                strategy
+                    .poly_handle_user_trade(&ctx, listener, &trade)
+                    .await;
             }
         } else {
             warn!(
@@ -592,11 +632,13 @@ impl EventProcessor {
         }
     }
 
-    fn handle_order(&self, listener: Listener, payload: OwnedValue) {
+    async fn handle_order(&self, listener: Listener, payload: OwnedValue) {
         if let Ok(order) = simd_json::serde::from_owned_value::<OrderPayload>(payload.clone()) {
             let ctx = self.strategy_context();
             for strategy in &self.strategies {
-                strategy.poly_handle_user_order(&ctx, listener, &order);
+                strategy
+                    .poly_handle_user_order(&ctx, listener, &order)
+                    .await;
             }
         } else {
             warn!("[PolyUser] Failed to parse order payload. Raw: {}", payload);

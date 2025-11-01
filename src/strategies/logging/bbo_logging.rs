@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use log::error;
 use serde_json::{json, Map, Value};
 use std::fs::{self, OpenOptions};
@@ -62,21 +63,21 @@ impl BBOLoggingStrategy {
     }
 }
 
+#[async_trait]
 impl Strategy for BBOLoggingStrategy {
     fn name(&self) -> &'static str {
         "BBOLoggingStrategy"
     }
 
-    fn poly_handle_market_agg_orderbook(
+    async fn poly_handle_market_agg_orderbook(
         &self,
         _ctx: &StrategyContext,
         _listener: Listener,
         _snapshot: &AggOrderbook,
     ) {
-        
     }
 
-    fn poly_handle_market_price_change(
+    async fn poly_handle_market_price_change(
         &self,
         _ctx: &StrategyContext,
         _listener: Listener,

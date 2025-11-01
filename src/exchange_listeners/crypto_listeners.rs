@@ -492,10 +492,7 @@ pub async fn deribit_listener(crypto: Crypto, is_perp: bool, event_tx: Arc<Count
     }
 }
 
-pub async fn coinbase_advanced_listener(
-    crypto: Crypto,
-    event_tx: Arc<CountingSender>,
-) {
+pub async fn coinbase_advanced_listener(crypto: Crypto, event_tx: Arc<CountingSender>) {
     let product_id = format!("{}-USD", crypto);
     let url = "wss://advanced-trade-ws.coinbase.com";
     let heartbeat_sub_msg = json!({"type": "subscribe", "channel": "heartbeats"}).to_string();

@@ -9,10 +9,10 @@ pub mod crypto_models;
 pub mod autodiscover_markets;
 pub mod event_processor;
 pub mod orderbooks;
+pub mod poly_client;
 pub mod poly_listeners;
 pub mod poly_models;
 pub mod states;
-pub mod poly_client;
 
 pub use crypto_models::{Crypto, Exchange, Instrument};
 // Use the new Polymarket state

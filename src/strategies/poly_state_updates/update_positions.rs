@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use std::sync::{Arc, RwLock};
 
 use crate::{
@@ -18,12 +19,13 @@ impl UpdatePositionStrategy {
     }
 }
 
+#[async_trait]
 impl Strategy for UpdatePositionStrategy {
     fn name(&self) -> &'static str {
         "UpdatePositions"
     }
 
-    fn poly_handle_user_trade(
+    async fn poly_handle_user_trade(
         &self,
         _ctx: &crate::strategies::StrategyContext,
         _listener: Listener,

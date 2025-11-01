@@ -160,7 +160,10 @@ pub async fn polymarket_market_listener(asset_ids: &[String], event_tx: Arc<Coun
     polymarket_websocket_handler(Listener::PolyMarket, sub_request, event_tx.clone()).await;
 }
 
-pub async fn polymarket_market_listener_legacy(asset_ids: &Vec<&str>, event_tx: Arc<CountingSender>) {
+pub async fn polymarket_market_listener_legacy(
+    asset_ids: &Vec<&str>,
+    event_tx: Arc<CountingSender>,
+) {
     if asset_ids.is_empty() {
         warn!(
             "[{}] No asset IDs provided. Listener will not start.",
