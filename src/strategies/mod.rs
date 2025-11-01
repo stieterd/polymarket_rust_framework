@@ -3,8 +3,6 @@ pub mod logging;
 pub mod poly_state_updates;
 
 pub mod custom;
-pub mod hourly_btc;
-pub mod pricing;
 pub mod strategy;
 
 pub use poly_state_updates::{
