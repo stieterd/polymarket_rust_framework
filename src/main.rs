@@ -51,11 +51,9 @@ use tokio::runtime;
 use crate::{
     exchange_listeners::autodiscover_markets::autodiscover_market_config,
     strategies::{
-        app_state_updates::update_crypto_orderbooks::UpdateCryptoOrderbookStrategy,
-        logging::{
-            bbo_logging::BBOLoggingStrategy, crypto_logging::CryptoLoggingStrategy,
-            main_logging::MainLoggingStrategy,
-        },
+        app_state_updates::update_crypto_orderbooks::UpdateCryptoOrderbookStrategy, custom::peter::peter_strategy::PeterStrategy, logging::{
+            bbo_logging::BBOLoggingStrategy, crypto_logging::CryptoLoggingStrategy, main_logging::MainLoggingStrategy, order_logging::OrderLoggingStrategy, position_logging::PositionLoggingStrategy
+        }
     },
 };
 
@@ -81,8 +79,11 @@ async fn debug_main() {
         Arc::new(UpdateOrderbookStrategy::new()),
         Arc::new(UpdateOrderStrategy::new()),
         Arc::new(UpdatePositionStrategy::new()),
-        Arc::new(UpdateCryptoOrderbookStrategy::new()),
-        Arc::new(BBOLoggingStrategy::new()),
+        Arc::new(PeterStrategy::new()),
+        Arc::new(OrderLoggingStrategy::new()),
+        Arc::new(PositionLoggingStrategy::new()),
+        // Arc::new(UpdateCryptoOrderbookStrategy::new()),
+        // Arc::new(BBOLoggingStrategy::new()),
         // Arc::new(MainLoggingStrategy::new()),
         // Arc::new(CryptoLoggingStrategy),
     ];

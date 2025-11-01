@@ -71,11 +71,11 @@ pub fn spawn_exchange_price_listeners(
         )));
 
         // Kraken Perp
-        tasks.push(tokio::spawn(crypto_listeners::kraken_listener(
-            crypto,
-            true, // is_perp = true
-            event_tx.clone(),
-        )));
+        // tasks.push(tokio::spawn(crypto_listeners::kraken_listener(
+        //     crypto,
+        //     true, // is_perp = true
+        //     event_tx.clone(),
+        // )));
     }
 
     // tasks.push(tokio::spawn(listeners::coinbase_legacy_listener(

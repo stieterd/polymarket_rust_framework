@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use log::error;
+use log::{error, info};
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex, RwLock},
@@ -22,12 +22,14 @@ use crate::{
 
 pub struct PeterStrategy {
     orderbook_context_queue: Mutex<std::collections::VecDeque<OrderBookContext>>,
+    order_placed: Mutex<bool>,
 }
 
 impl PeterStrategy {
     pub fn new() -> Self {
         Self {
             orderbook_context_queue: Mutex::new(VecDeque::with_capacity(1000)), // 1000 is the max size of the queue
+            order_placed: Mutex::new(false),
         }
     }
 }
@@ -75,30 +77,41 @@ impl Strategy for PeterStrategy {
                 if !matches_best {
                     return;
                 }
+                
+                // If price change in best bid or best ask
+                if _payload.size == "0" {
+                    // Collect Orderbook Context in our queue
+                    let orderbook_context = OrderBookContext {
+                        midpoint: orderbook.get_midpoint(),
+                        spread: orderbook.get_spread(),
+                    };
 
-                // Collect Orderbook Context in our queue
-                let orderbook_context = OrderBookContext {
-                    midpoint: orderbook.get_midpoint(),
-                    spread: orderbook.get_spread(),
-                };
-
-                if let Ok(mut queue) = self.orderbook_context_queue.lock() {
-                    queue.push_back(orderbook_context);
-                    while queue.len() > 1000 {
-                        queue.pop_front();
+                    if let Ok(mut queue) = self.orderbook_context_queue.lock() {
+                        queue.push_back(orderbook_context);
+                        while queue.len() > 1000 {
+                            queue.pop_front();
+                        }
                     }
+
                 }
 
+                // println!("Checking for volume");
                 if let Some((ask_price, ask_size)) = best_ask {
+                    info!("{:?}, {:?}", ask_size, MAX_VOLUME);
                     if ask_size < MAX_VOLUME {
-                        order_to_place =
-                            Some((ask_price, ask_size, orderbook.get_tick_size().to_string()));
+                        if let Ok(mut placed) = self.order_placed.lock() {
+                            if !*placed {
+                                *placed = true;
+                                order_to_place =
+                                    Some((ask_price, ask_size, orderbook.get_tick_size().to_string()));
+                            }
+                        }
                     }
                 }
             }
         }
-
         if let Some((price, size, tick_size)) = order_to_place {
+            println!("We are placing an order");
             if let Err(err) = PolyClient::place_limit_order(
                 &_ctx.poly_state,
                 asset_id,
