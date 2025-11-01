@@ -41,7 +41,7 @@ pub struct OrderBook {
 }
 
 impl OrderBook {
-    pub fn new(snapshot: &AggOrderbook) -> Self {
+    pub fn new(snapshot: &AggOrderbook, tick_size: String) -> Self {
         let bids = DashMap::new();
         for entry in &snapshot.bids {
             if let (Ok(price), Ok(size)) = (entry.price.parse::<f64>(), entry.size.parse::<f64>()) {
@@ -69,7 +69,7 @@ impl OrderBook {
         Self {
             asset_id: snapshot.asset_id.clone(),
             timestamp: snapshot.timestamp.clone(),
-            tick_size: "0.01".to_string(),
+            tick_size: tick_size,
             bid_heap: Mutex::new(convert_to_bid_heap(&bids)),
             ask_heap: Mutex::new(convert_to_ask_heap(&asks)),
             bids_dirty: AtomicBool::new(false),

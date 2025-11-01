@@ -21,14 +21,12 @@ use crate::{
 
 pub struct PeterStrategy {
     orderbook_context_queue: Mutex<std::collections::VecDeque<OrderBookContext>>,
-    order_placed: Mutex<bool>,
 }
 
 impl PeterStrategy {
     pub fn new() -> Self {
         Self {
             orderbook_context_queue: Mutex::new(VecDeque::with_capacity(1000)), // 1000 is the max size of the queue
-            order_placed: Mutex::new(false),
         }
     }
 }
@@ -99,18 +97,25 @@ impl Strategy for PeterStrategy {
                     .and_then(|m| m.negRisk.clone())
                     .unwrap_or(false);
 
-                // println!("Checking for volume");
                 if let Some((bid_price, bid_size)) = best_bid {
-                    // info!("{:?}, {:?}", ask_size, MAX_VOLUME);
-                    if bid_size < MAX_VOLUME && !negrisk {
-                        if let Ok(mut placed) = self.order_placed.lock() {
-                            if !*placed {
-                                *placed = true;
-                                order_to_place = Some((
-                                    bid_price,
-                                    bid_size,
-                                    orderbook.get_tick_size().to_string(),
-                                ));
+                    if bid_size > MAX_VOLUME {
+                        if let Ok(rate_limit) = _ctx.poly_state.rate_limit.read() {
+                            if !rate_limit.should_wait() {
+                                let exists = _ctx
+                                    .poly_state
+                                    .open_orders
+                                    .get(asset_id)
+                                    .map(|orders| {
+                                        orders.order_exists(OrderSide::Buy, bid_price, bid_size)
+                                    })
+                                    .unwrap_or(false);
+                                if !exists {
+                                    order_to_place = Some((
+                                        bid_price,
+                                        bid_size,
+                                        orderbook.get_tick_size().to_string(),
+                                    ));
+                                }
                             }
                         }
                     }
@@ -130,24 +135,49 @@ impl Strategy for PeterStrategy {
             let asset_id_owned = asset_id.clone();
             let tick_size_owned = tick_size.clone();
 
-            tokio::spawn(async move {
-                if let Err(err) = PolyClient::place_limit_order(
-                    poly_state.as_ref(),
-                    &asset_id_owned,
-                    OrderSide::Buy,
-                    price,
-                    10000,
-                    tick_size_owned.as_str(),
-                    negrisk,
-                )
-                .await
-                {
-                    error!(
-                        "[PeterStrategy] Failed to place limit order for {} at {}x{}: {}",
-                        asset_id_owned, price, size, err
-                    );
+            if let Some(existing_orders) = _ctx.poly_state.open_orders.get(asset_id) {
+                let poly_state_cancel = Arc::clone(&_ctx.poly_state);
+                let asset_id_cancel = asset_id.to_string();
+                let orders_to_cancel: Vec<(OrderSide, u32, u32)> = existing_orders
+                    .bids
+                    .iter()
+                    .map(|entry| (OrderSide::Buy, entry.key().0, entry.key().1))
+                    .chain(
+                        existing_orders
+                            .asks
+                            .iter()
+                            .map(|entry| (OrderSide::Sell, entry.key().0, entry.key().1)),
+                    )
+                    .collect();
+                if !orders_to_cancel.is_empty() {
+                    tokio::spawn(async move {
+                        for (side, price, size) in orders_to_cancel {
+                            let _ = PolyClient::cancel_limit_order(
+                                Arc::clone(&poly_state_cancel),
+                                &asset_id_cancel,
+                                side,
+                                price,
+                                size,
+                            );
+                        }
+                    });
                 }
-            });
+            }
+
+            if let Err(err) = PolyClient::place_limit_order(
+                poly_state,
+                &asset_id_owned,
+                OrderSide::Buy,
+                price,
+                10000,
+                tick_size_owned.as_str(),
+                negrisk,
+            ) {
+                error!(
+                    "[PeterStrategy] Failed to initiate limit order for {} at {}x{}: {}",
+                    asset_id_owned, price, size, err
+                );
+            }
         }
     }
 }

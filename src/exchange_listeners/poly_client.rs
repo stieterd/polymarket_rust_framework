@@ -10,7 +10,7 @@ use serde_json::Value;
 use crate::{
     clob_client::clob_types::OrderArgs,
     exchange_listeners::{
-        poly_models::{AssetOrders, OpenOrder, OrderSide},
+        poly_models::{AssetOrders, OpenOrder, OrderSide, OrderState},
         states::PolyMarketState,
     },
     marketmaking::marketmakingclient::CLIENT,
@@ -21,19 +21,20 @@ pub struct PolyClient;
 
 impl PolyClient {
     /// Places a limit order, sends it to the exchange, and records it in `poly_state.open_orders`.
-    pub async fn place_limit_order(
-        poly_state: &PolyMarketState,
+    pub fn place_limit_order(
+        poly_state: Arc<PolyMarketState>,
         asset_id: &str,
         side: OrderSide,
         price: u32,
         size: u32,
         tick_size: &str,
         neg_risk: bool,
-    ) -> Result<Value, Box<dyn Error + Send + Sync>> {
-        if let Ok(rate_limit) = poly_state.rate_limit.read() {
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        if let Ok(mut rate_limit) = poly_state.rate_limit.write() {
             if rate_limit.should_wait() {
                 return Err("Rate limit has been hit".into());
             }
+            rate_limit.update_timestamp();
         }
         let client = Arc::clone(&CLIENT);
         let price_dec = price as f64 / 1000.0;
@@ -50,12 +51,9 @@ impl PolyClient {
         //     neg_risk
         // );
 
-        if let Ok(mut rate_limit) = poly_state.rate_limit.write() {
-            rate_limit.update_timestamp();
-        }
-
-        let local_order = Self::record_order(poly_state, asset_id, side, price, size, 0, None)
-            .ok_or_else(|| "order already exists".to_string())?;
+        let local_order =
+            Self::record_order(poly_state.as_ref(), asset_id, side, price, size, 0, None)
+                .ok_or_else(|| "order already exists".to_string())?;
 
         let order_args = OrderArgs::new(
             asset_id,
@@ -78,57 +76,83 @@ impl PolyClient {
                 size_dec,
                 tick_size
             );
-            Self::remove_order_entry(poly_state, asset_id, side, price, size);
+            Self::remove_order_entry(poly_state.as_ref(), asset_id, side, price, size);
             return Err("Computed zero maker/taker amount when building order".into());
         }
-        match client.post_order(&signed_order, "GTC").await {
-            Ok(posted_order) => {
-                let order_id = match posted_order
-                    .get("orderID")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned)
-                    .or_else(|| {
-                        posted_order
-                            .get("orderId")
-                            .and_then(Value::as_str)
-                            .map(str::to_owned)
-                    }) {
-                    Some(id) => id,
-                    None => {
-                        Self::remove_order_entry(poly_state, asset_id, side, price, size);
-                        return Err("orderID missing from response".into());
-                    }
-                };
+        let client_clone = Arc::clone(&client);
+        let poly_state_clone = Arc::clone(&poly_state);
+        let asset_id_owned = asset_id.to_string();
+        let local_order_clone = Arc::clone(&local_order);
+        tokio::spawn(async move {
+            match client_clone.post_order(&signed_order, "GTC").await {
+                Ok(posted_order) => {
+                    let order_id = match posted_order
+                        .get("orderID")
+                        .and_then(Value::as_str)
+                        .map(str::to_owned)
+                        .or_else(|| {
+                            posted_order
+                                .get("orderId")
+                                .and_then(Value::as_str)
+                                .map(str::to_owned)
+                        }) {
+                        Some(id) => id,
+                        None => {
+                            Self::remove_order_entry(
+                                poly_state_clone.as_ref(),
+                                &asset_id_owned,
+                                side,
+                                price,
+                                size,
+                            );
+                            error!(
+                                "orderID missing from response when placing {}",
+                                asset_id_owned
+                            );
+                            return;
+                        }
+                    };
 
-                if let Ok(mut order) = local_order.lock() {
-                    order.set_id(Some(order_id));
-                } else {
-                    warn!(
+                    if let Ok(mut order) = local_order_clone.lock() {
+                        order.set_id(Some(order_id));
+                    } else {
+                        warn!(
                         "Placed order for {} {:?} at {} / {}, but mutex was poisoned when recording id",
-                        asset_id, side, price, size
+                        asset_id_owned, side, price, size
+                    );
+                    }
+
+                    drop(posted_order);
+                }
+                Err(e) => {
+                    error!(
+                        "[PolyClient] Failed to place order for {} {:?} at {}x{}: {}",
+                        asset_id_owned, side, price, size, e
+                    );
+                    Self::remove_order_entry(
+                        poly_state_clone.as_ref(),
+                        &asset_id_owned,
+                        side,
+                        price,
+                        size,
                     );
                 }
-
-                Ok(posted_order)
             }
-            Err(e) => {
-                Self::remove_order_entry(poly_state, asset_id, side, price, size);
-                Err(e)
-            }
-        }
+        });
+        Ok(())
     }
 
-    pub async fn cancel_limit_order(
-        poly_state: &PolyMarketState,
+    pub fn cancel_limit_order(
+        poly_state: Arc<PolyMarketState>,
         asset_id: &str,
         side: OrderSide,
         price: u32,
         size: u32,
-    ) -> Result<Value, Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         let client = Arc::clone(&CLIENT);
         let order_key = (price, size);
 
-        let (order_arc, book) = {
+        let order_arc = {
             let asset_orders = poly_state
                 .open_orders
                 .get(asset_id)
@@ -139,53 +163,66 @@ impl PolyClient {
                 OrderSide::Sell => Arc::clone(&asset_orders.asks),
             };
 
-            let order_arc = {
-                let entry = book
-                    .get(&order_key)
-                    .ok_or_else(|| "order not found".to_string())?;
-                Arc::clone(entry.value())
-            };
-
-            (order_arc, book)
+            let entry = book
+                .get(&order_key)
+                .ok_or_else(|| "order not found".to_string())?;
+            Arc::clone(entry.value())
         };
 
         let order_id = {
-            let order = order_arc
+            let mut order = order_arc
                 .lock()
                 .map_err(|_| "order mutex poisoned".to_string())?;
-            order
+            let id = order
                 .id()
                 .cloned()
-                .ok_or_else(|| "order id not set".to_string())?
+                .ok_or_else(|| "order id not set".to_string())?;
+            order.set_state(OrderState::ToBeCanceled);
+            id
         };
 
-        let removed_order = book.remove(&order_key).map(|(_, arc)| arc);
+        let poly_state_clone = Arc::clone(&poly_state);
+        let asset_id_owned = asset_id.to_string();
+        let client_clone = Arc::clone(&client);
+        let order_arc_clone = Arc::clone(&order_arc);
+        tokio::spawn(async move {
+            let id_ref = order_id.as_str();
+            match client_clone.cancel_orders(&[id_ref]).await {
+                Ok(resp) => {
+                    let canceled_ids = resp
+                        .get("canceled")
+                        .and_then(Value::as_array)
+                        .map(|arr| arr.iter().filter_map(Value::as_str).collect::<Vec<_>>())
+                        .unwrap_or_default();
 
-        let id_ref = order_id.as_str();
-        match client.cancel_orders(&[id_ref]).await {
-            Ok(resp) => {
-                let canceled_ids = resp
-                    .get("canceled")
-                    .and_then(Value::as_array)
-                    .map(|arr| arr.iter().filter_map(Value::as_str).collect::<Vec<_>>())
-                    .unwrap_or_default();
-
-                if canceled_ids.iter().any(|&id| id == id_ref) {
-                    Ok(resp)
-                } else {
-                    if let Some(arc) = removed_order {
-                        Self::restore_order_entry(poly_state, asset_id, side, price, size, arc);
+                    if canceled_ids.iter().any(|&id| id == id_ref) {
+                        Self::remove_order_entry(
+                            poly_state_clone.as_ref(),
+                            &asset_id_owned,
+                            side,
+                            price,
+                            size,
+                        );
+                    } else {
+                        if let Ok(mut order) = order_arc_clone.lock() {
+                            order.set_state(OrderState::Live);
+                        }
+                        error!("Order {} not canceled for asset {}", id_ref, asset_id_owned);
                     }
-                    Err("order not canceled".into())
+                }
+                Err(e) => {
+                    error!(
+                        "Failed to cancel order {} for asset {}: {}",
+                        id_ref, asset_id_owned, e
+                    );
+                    if let Ok(mut order) = order_arc_clone.lock() {
+                        order.set_state(OrderState::Live);
+                    }
                 }
             }
-            Err(e) => {
-                if let Some(arc) = removed_order {
-                    Self::restore_order_entry(poly_state, asset_id, side, price, size, arc);
-                }
-                Err(e)
-            }
-        }
+        });
+
+        Ok(())
     }
 
     fn record_order(
@@ -290,40 +327,4 @@ impl PolyClient {
         }
     }
 
-    fn restore_order_entry(
-        poly_state: &PolyMarketState,
-        asset_id: &str,
-        side: OrderSide,
-        price: u32,
-        size: u32,
-        order: Arc<Mutex<OpenOrder>>,
-    ) {
-        let order_key = (price, size);
-
-        if let Some(asset_orders) = poly_state.open_orders.get_mut(asset_id) {
-            let book = match side {
-                OrderSide::Buy => Arc::clone(&asset_orders.bids),
-                OrderSide::Sell => Arc::clone(&asset_orders.asks),
-            };
-            drop(asset_orders);
-
-            book.insert(order_key, order);
-        } else {
-            let bids = DashMap::new();
-            let asks = DashMap::new();
-
-            match side {
-                OrderSide::Buy => {
-                    bids.insert(order_key, order);
-                }
-                OrderSide::Sell => {
-                    asks.insert(order_key, order);
-                }
-            }
-
-            poly_state
-                .open_orders
-                .insert(asset_id.to_string(), AssetOrders::new(bids, asks));
-        }
-    }
 }

@@ -8,6 +8,7 @@ pub mod popular_tokens;
 pub mod strategies;
 
 use itertools::Itertools;
+use log::info;
 use strategies::{Strategy, UpdateOrderStrategy, UpdateOrderbookStrategy, UpdatePositionStrategy};
 
 use clob_client::{
@@ -79,24 +80,27 @@ fn main() {
 
 async fn debug_main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
-
+    info!("Fetching neg risk markets");
     let events = fetch_neg_risk_markets().await.unwrap();
     let (events, market_map) = events_json_to_events_with_market_map(events);
 
     let app_state = Arc::new(AppState::default()); // Financial instruments
     let market_map = Arc::new(market_map); // put into Arc for sharing
+    let market_asset_ids: Vec<String> = market_map.keys().cloned().collect();
+    let market_asset_ids = Arc::new(market_asset_ids);
     let polymarket_state = Arc::new(PolyMarketState {
         markets: Arc::clone(&market_map),
         ..Default::default()
     }); // Orderbooks
-
+    info!("Starting strategies");
     let strategies: Vec<Arc<dyn Strategy>> = vec![
         Arc::new(UpdateOrderbookStrategy::new()),
         Arc::new(UpdateOrderStrategy::new()),
         Arc::new(UpdatePositionStrategy::new()),
         Arc::new(PeterStrategy::new()),
-        Arc::new(OrderLoggingStrategy::new()),
-        Arc::new(PositionLoggingStrategy::new()),
+        // Arc::new(OrderLoggingStrategy::new()),
+        // Arc::new(PositionLoggingStrategy::new()),
+
         // Arc::new(UpdateCryptoOrderbookStrategy::new()),
         // Arc::new(BBOLoggingStrategy::new()),
         // Arc::new(MainLoggingStrategy::new()),
@@ -115,21 +119,38 @@ async fn debug_main() {
 
     log::info!("--- Exchange Listener Thread has been started ---");
 
-    let yes_token_static: &'static str =
-        Box::leak(market_config.yes_token_id.clone().into_boxed_str());
-    let market_asset_ids = vec![yes_token_static];
-    let market_asset_ids = popular_tokens::ASSET_TOKENS;
     let market_counting_sender = counting_sender.clone();
+    const MARKET_LISTENER_BATCH_SIZE: usize = 500;
+    let total_asset_ids = market_asset_ids.len();
 
-    let market_asset_ids = market_asset_ids.to_vec(); // Ensure market_asset_ids is moved into the async block
+    if total_asset_ids == 0 {
+        tokio::spawn(async move {
+            let asset_refs: Vec<&str> = Vec::new();
+            exchange_listeners::poly_listeners::polymarket_market_listener_legacy(
+                &asset_refs,
+                market_counting_sender,
+            )
+            .await;
+        });
+    } else {
+        for batch_start in (0..total_asset_ids).step_by(MARKET_LISTENER_BATCH_SIZE) {
+            let batch_end = (batch_start + MARKET_LISTENER_BATCH_SIZE).min(total_asset_ids);
+            let market_asset_ids = Arc::clone(&market_asset_ids);
+            let market_counting_sender = counting_sender.clone();
 
-    tokio::spawn(async move {
-        exchange_listeners::poly_listeners::polymarket_market_listener_legacy(
-            &market_asset_ids,
-            market_counting_sender,
-        )
-        .await;
-    });
+            tokio::spawn(async move {
+                let asset_refs: Vec<&str> = market_asset_ids[batch_start..batch_end]
+                    .iter()
+                    .map(String::as_str)
+                    .collect();
+                exchange_listeners::poly_listeners::polymarket_market_listener_legacy(
+                    &asset_refs,
+                    market_counting_sender,
+                )
+                .await;
+            });
+        }
+    }
 
     let _exchange_listener_handles =
         exchange_listeners::spawn_exchange_price_listeners(counting_sender.clone());
@@ -148,7 +169,7 @@ async fn debug_main() {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_millis();
-            // println!("Pending events: {} - {}", counting_sender.pending(), now);
+            println!("Pending events: {} - {}", counting_sender.pending(), now);
         }
     }
 }

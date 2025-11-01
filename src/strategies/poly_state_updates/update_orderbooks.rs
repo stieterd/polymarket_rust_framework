@@ -28,7 +28,15 @@ impl Strategy for UpdateOrderbookStrategy {
         _snapshot: &crate::exchange_listeners::poly_models::AggOrderbook,
     ) {
         let asset_id = _snapshot.asset_id.clone();
-        let orderbook = OrderBook::new(_snapshot);
+        let tick_size = _ctx
+            .poly_state
+            .markets
+            .get(&asset_id)
+            .unwrap()
+            .orderPriceMinTickSize
+            .unwrap();
+        let tick_size_str = tick_size.to_string();
+        let orderbook = OrderBook::new(_snapshot, tick_size_str);
         _ctx.poly_state
             .orderbooks
             .insert(asset_id, Arc::new(RwLock::new(orderbook)));

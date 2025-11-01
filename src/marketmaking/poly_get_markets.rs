@@ -13,11 +13,11 @@ struct Position {
 pub async fn fetch_neg_risk_markets() -> Result<Vec<EventJson>, Box<dyn std::error::Error>> {
     let client = Client::new();
     let mut offset = 0;
-    let mut length = 100;
+    let mut length = 500;
     let mut response_list: Vec<EventJson> = Vec::new();
 
-    while length == 100 {
-        let url = format!("https://gamma-api.polymarket.com/events?limit=100&active=true&archived=false&closed=false&order=volume24hr&ascending=false&offset={}", offset);
+    while length == 500 {
+        let url = format!("https://gamma-api.polymarket.com/events?limit=500&active=true&archived=false&closed=false&order=volume24hr&ascending=false&offset={}", offset);
         let response = client
             .get(&url)
             .header("Host", "gamma-api.polymarket.com")
@@ -41,8 +41,6 @@ pub async fn fetch_neg_risk_markets() -> Result<Vec<EventJson>, Box<dyn std::err
 fn filter_neg_risk_markets(events: Vec<EventJson>) -> Vec<EventJson> {
     events
         .into_iter()
-        .filter(|event| event.negRisk.unwrap_or(false)) // Filter by negRisk
-        .filter(|event| event.enableNegRisk.unwrap_or(false))
         .map(|mut event| {
             if let Some(ref mut markets) = event.markets {
                 // Retain markets that do not have the specified slug
@@ -53,124 +51,19 @@ fn filter_neg_risk_markets(events: Vec<EventJson>) -> Vec<EventJson> {
             event
         })
         .filter(|event| {
-            !event
-                .slug
-                .clone()
-                .unwrap_or("".to_string())
-                .contains("epl-")
-        })
-        .filter(|event| {
-            !event
-                .slug
-                .clone()
-                .unwrap_or("".to_string())
-                .contains("bitcoin-price-")
-        })
-        .filter(|event| {
-            !event
-                .slug
-                .clone()
-                .unwrap_or("".to_string())
-                .contains("ethereum-price-")
-        })
-        .filter(|event| {
-            !event
-                .slug
-                .clone()
-                .unwrap_or("".to_string())
-                .contains("solana-price-")
-        })
-        // .filter(|event| !event.slug.clone().unwrap_or("".to_string()).contains("open-winner"))
-        .filter(|event| {
-            !event
-                .slug
-                .clone()
-                .unwrap_or("".to_string())
-                .contains("-stanley-")
-        })
-        .filter(|event| {
-            !event
-                .slug
-                .clone()
-                .unwrap_or("".to_string())
-                .contains("europa-league-")
-        })
-        // .filter(|event| !event.slug.clone().unwrap_or("".to_string()).contains("superbowl-champion-"))
-        .filter(|event| {
-            !event
-                .slug
-                .clone()
-                .unwrap_or("".to_string())
-                .contains("champions-league-winner-")
-        })
-        .filter(|event| {
-            !event
-                .slug
-                .clone()
-                .unwrap_or("".to_string())
-                .contains("uefa-")
-        })
-        .filter(|event| {
-            !event
-                .slug
-                .clone()
-                .unwrap_or("".to_string())
-                .contains("nfl-")
-        })
-        .filter(|event| {
-            !event
-                .slug
-                .clone()
-                .unwrap_or("".to_string())
-                .contains("afc-")
-        })
-        .filter(|event| {
-            !event
-                .slug
-                .clone()
-                .unwrap_or("".to_string())
-                .contains("uel-")
-        })
-        .filter(|event| {
-            !event
-                .slug
-                .clone()
-                .unwrap_or("".to_string())
-                .contains("liga-")
-        })
-        .filter(|event| {
-            !event
-                .slug
-                .clone()
-                .unwrap_or("".to_string())
-                .contains("-vs-")
-        })
-        .filter(|event| {
-            !event
-                .slug
-                .clone()
-                .unwrap_or("".to_string())
-                .contains("-temperature-")
-        })
-        .filter(|event| {
-            !event
-                .slug
-                .clone()
-                .unwrap_or("".to_string())
-                .contains("fifa")
-        })
-        .filter(|event| event.markets.clone().unwrap().len() < 30)
-        .filter(|event| {
             if let Some(ref tags) = event.tags {
-                let mut contains_sports = false;
+                let mut skip_market = false;
                 for tag in tags.iter() {
                     let slug = tag.slug.clone().unwrap_or_default();
                     if slug.contains("sports") {
-                        contains_sports = true;
+                        skip_market = true;
+                        break;
+                    } else if slug.contains("crypto") {
+                        skip_market = true;
                         break;
                     }
                 }
-                !contains_sports
+                !skip_market
             } else {
                 true
             }

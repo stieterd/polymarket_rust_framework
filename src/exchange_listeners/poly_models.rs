@@ -362,6 +362,14 @@ impl AssetOrders {
             asks: Arc::new(asks),
         }
     }
+
+    pub fn order_exists(&self, side: OrderSide, price: u32, size: u32) -> bool {
+        let key = (price, size);
+        match side {
+            OrderSide::Buy => self.bids.contains_key(&key),
+            OrderSide::Sell => self.asks.contains_key(&key),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -426,6 +434,10 @@ impl OpenOrder {
         } else {
             OrderState::Unconfirmed
         };
+    }
+
+    pub fn set_state(&mut self, state: OrderState) {
+        self.state = state;
     }
 
     pub fn set_size_filled(&mut self, size_filled: u32) {
