@@ -237,8 +237,11 @@ impl OrderBuilder {
             signature_type: ethers::types::U256::from(data.signature_type),
         };
 
-        let order_struct_hash = compute_order_struct_hash(&order);
+        self.sign_prepared_order(order)
+    }
 
+    pub fn sign_prepared_order(&self, order: Order) -> SignedOrder {
+        let order_struct_hash = compute_order_struct_hash(&order);
         let mut message = Vec::with_capacity(2 + 32 + 32);
         message.extend_from_slice(&MESSAGE_PREFIX[..]);
         message.extend_from_slice(&order_struct_hash);
@@ -437,6 +440,71 @@ fn round_down(x: f64, sig_digits: usize) -> f64 {
 
 fn round_normal(x: f64, sig_digits: usize) -> f64 {
     (x * 10f64.powi(sig_digits as i32)).round() / 10f64.powi(sig_digits as i32)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::clob_client::constants::POLYGON;
+    use crate::credentials::{ADDRESS, PRIVATE_KEY, SIGNER};
+    use serde_json::Value;
+    use std::str::FromStr;
+
+    fn parse_address(value: &Value, key: &str) -> Address {
+        let as_str = value[key]
+            .as_str()
+            .unwrap_or_else(|| panic!("{key} missing or not a string"));
+        Address::from_str(as_str).unwrap()
+    }
+
+    fn parse_u256(value: &Value, key: &str) -> U256 {
+        match &value[key] {
+            Value::String(s) => U256::from_dec_str(s).unwrap(),
+            Value::Number(n) => U256::from_dec_str(&n.to_string()).unwrap(),
+            other => panic!("{key} has unexpected type: {other:?}"),
+        }
+    }
+
+    fn parse_side(value: &Value) -> u8 {
+        match value["side"].as_str().unwrap() {
+            "BUY" => 0,
+            "SELL" => 1,
+            other => panic!("unexpected side {other}"),
+        }
+    }
+
+    #[test]
+    fn replicates_known_signature() {
+        let payload: Value = serde_json::from_str(
+            r#"{"order":{"salt":1260445392909,"maker":"0xB0A60787710f8D6254dC0E304Fc72b6A3907e0C2","signer":"0x59Bb2eca7dDC4553fA936129D3613b1aA340C278","taker":"0x0000000000000000000000000000000000000000","tokenId":"104468181147316868388088006861839293041095272602974154655578369735976654024471","makerAmount":"4715000","takerAmount":"5000000","side":"BUY","expiration":"0","nonce":"0","feeRateBps":"0","signatureType":2,"signature":"0xf12cf29df658868b426ecec75b7071b99e4862f84c92428e8bc56bf47f9831921a95ff1cd4b0fc3c9a22940b0c5d1d2ffc13ddb2f16fac58a30d884c3f552cef1b"},"owner":"db79e748-95ee-36cd-f9ab-00143377acba","orderType":"GTC"}"#,
+        )
+        .unwrap();
+        let order_value = &payload["order"];
+
+        let order = Order {
+            salt: parse_u256(order_value, "salt"),
+            maker: parse_address(order_value, "maker"),
+            signer: parse_address(order_value, "signer"),
+            taker: parse_address(order_value, "taker"),
+            token_id: parse_u256(order_value, "tokenId"),
+            maker_amount: parse_u256(order_value, "makerAmount"),
+            taker_amount: parse_u256(order_value, "takerAmount"),
+            expiration: parse_u256(order_value, "expiration"),
+            nonce: parse_u256(order_value, "nonce"),
+            fee_rate_bps: parse_u256(order_value, "feeRateBps"),
+            side: parse_side(order_value),
+            signature_type: parse_u256(order_value, "signatureType"),
+        };
+
+        let signature_type = order_value["signatureType"].as_u64().unwrap();
+
+        let signer = PolySigner::new(PRIVATE_KEY, POLYGON);
+        let builder = OrderBuilder::new(signer, Some(signature_type), Some(*SIGNER));
+
+        let signed = builder.sign_prepared_order(order);
+        let expected_signature = order_value["signature"].as_str().unwrap();
+        assert_eq!(signed.signature, expected_signature);
+    }
 }
 
 fn round_up(x: f64, sig_digits: usize) -> f64 {

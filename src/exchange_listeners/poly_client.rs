@@ -4,7 +4,7 @@ use std::{
 };
 
 use dashmap::DashMap;
-use log::warn;
+use log::{error, info, warn};
 use serde_json::Value;
 
 use crate::{
@@ -28,10 +28,22 @@ impl PolyClient {
         price: u32,
         size: u32,
         tick_size: &str,
+        neg_risk: bool,
     ) -> Result<Value, Box<dyn Error + Send + Sync>> {
         let client = Arc::clone(&CLIENT);
         let price_dec = price as f64 / 1000.0;
         let size_dec = size as f64 / 1000.0;
+        // log::info!(
+        //     "[PolyClient] preparing order asset={} side={:?} price_int={} size_int={} price_dec={} size_dec={} tick_size={} neg_risk={}",
+        //     asset_id,
+        //     side,
+        //     price,
+        //     size,
+        //     price_dec,
+        //     size_dec,
+        //     tick_size,
+        //     neg_risk
+        // );
 
         let local_order = Self::record_order(poly_state, asset_id, side, price, size, 0, None)
             .ok_or_else(|| "order already exists".to_string())?;
@@ -47,7 +59,19 @@ impl PolyClient {
             None,
         );
 
-        let signed_order = client.create_order(&order_args, tick_size, true);
+        let signed_order = client.create_order(&order_args, tick_size, neg_risk);
+        if signed_order.order.maker_amount.is_zero() || signed_order.order.taker_amount.is_zero() {
+            log::error!(
+                "[PolyClient] Computed zero maker/taker amount for asset={} side={:?} price_dec={} size_dec={} tick_size={}",
+                asset_id,
+                side,
+                price_dec,
+                size_dec,
+                tick_size
+            );
+            Self::remove_order_entry(poly_state, asset_id, side, price, size);
+            return Err("Computed zero maker/taker amount when building order".into());
+        }
         match client.post_order(&signed_order, "GTC").await {
             Ok(posted_order) => {
                 let order_id = match posted_order

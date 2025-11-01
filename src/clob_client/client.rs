@@ -257,6 +257,7 @@ impl ClobClient {
         order_type: &str,
     ) -> Result<Value, Box<dyn Error + Send + Sync>> {
         let body = Some(order_to_json(order, &self.creds.api_key, order_type));
+
         let request_args = RequestArgs {
             method: "POST",
             request_path: "/order",
