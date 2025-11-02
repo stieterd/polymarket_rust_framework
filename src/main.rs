@@ -169,7 +169,7 @@ async fn debug_main() {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_millis();
-            println!("Pending events: {} - {}", counting_sender.pending(), now);
+            // println!("Pending events: {} - {}", counting_sender.pending(), now);
         }
     }
 }
