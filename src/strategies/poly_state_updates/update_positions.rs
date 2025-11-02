@@ -25,7 +25,7 @@ impl Strategy for UpdatePositionStrategy {
 
     fn poly_handle_user_trade(
         &self,
-        _ctx: &crate::strategies::StrategyContext,
+        ctx: Arc<crate::strategies::StrategyContext>,
         _listener: Listener,
         _payload: &crate::exchange_listeners::poly_models::TradePayload,
     ) {
@@ -47,7 +47,7 @@ impl Strategy for UpdatePositionStrategy {
                 OrderSide::Buy => trade_size,
                 OrderSide::Sell => -trade_size,
             };
-            match _ctx.poly_state.positions.entry(asset_id.clone()) {
+            match ctx.poly_state.positions.entry(asset_id.clone()) {
                 Entry::Occupied(mut entry) => {
                     if let Ok(mut position) = entry.get().write() {
                         position.size += signed_size;

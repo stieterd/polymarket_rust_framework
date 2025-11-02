@@ -1,4 +1,5 @@
 use log::info;
+use std::sync::Arc;
 
 use crate::{
     exchange_listeners::{
@@ -25,7 +26,7 @@ impl Strategy for MainLoggingStrategy {
 
     fn crypto_handle_price_update(
         &self,
-        _ctx: &StrategyContext,
+        _ctx: Arc<StrategyContext>,
         _exchange: Exchange,
         _instrument: Instrument,
         _crypto: Crypto,

@@ -23,12 +23,12 @@ impl Strategy for UpdateOrderbookStrategy {
 
     fn poly_handle_market_agg_orderbook(
         &self,
-        _ctx: &crate::strategies::StrategyContext,
+        ctx: Arc<crate::strategies::StrategyContext>,
         _listener: Listener,
         _snapshot: &crate::exchange_listeners::poly_models::AggOrderbook,
     ) {
         let asset_id = _snapshot.asset_id.clone();
-        let tick_size = _ctx
+        let tick_size = ctx
             .poly_state
             .markets
             .get(&asset_id)
@@ -37,18 +37,18 @@ impl Strategy for UpdateOrderbookStrategy {
             .unwrap();
         let tick_size_str = tick_size.to_string();
         let orderbook = OrderBook::new(_snapshot, tick_size_str);
-        _ctx.poly_state
+        ctx.poly_state
             .orderbooks
             .insert(asset_id, Arc::new(RwLock::new(orderbook)));
     }
 
     fn poly_handle_market_price_change(
         &self,
-        _ctx: &crate::strategies::StrategyContext,
+        ctx: Arc<crate::strategies::StrategyContext>,
         _listener: crate::exchange_listeners::poly_models::Listener,
         _payload: &PriceChange,
     ) {
-        if let Some(orderbook_entry) = _ctx.poly_state.orderbooks.get(&_payload.asset_id) {
+        if let Some(orderbook_entry) = ctx.poly_state.orderbooks.get(&_payload.asset_id) {
             if let Ok(book) = orderbook_entry.write() {
                 // Pass an epoch timestamp string as the second argument.
                 // For now, use chrono to get the current epoch as a string.
@@ -60,11 +60,11 @@ impl Strategy for UpdateOrderbookStrategy {
 
     fn poly_handle_market_tick_size_change(
         &self,
-        _ctx: &crate::strategies::StrategyContext,
+        ctx: Arc<crate::strategies::StrategyContext>,
         _listener: Listener,
         _payload: &crate::exchange_listeners::poly_models::TickSizeChangePayload,
     ) {
-        if let Some(orderbook_entry) = _ctx.poly_state.orderbooks.get(&_payload.asset_id) {
+        if let Some(orderbook_entry) = ctx.poly_state.orderbooks.get(&_payload.asset_id) {
             if let Ok(mut book) = orderbook_entry.write() {
                 book.set_tick_size(_payload.new_tick_size.clone());
             }

@@ -11,6 +11,7 @@ use crate::{
     },
     strategies::Strategy,
 };
+use std::sync::Arc;
 
 pub struct UpdateCryptoOrderbookStrategy;
 
@@ -95,15 +96,15 @@ impl Strategy for UpdateCryptoOrderbookStrategy {
 
     fn crypto_handle_price_update(
         &self,
-        _ctx: &crate::strategies::StrategyContext,
+        ctx: Arc<crate::strategies::StrategyContext>,
         _exchange: crate::exchange_listeners::Exchange,
         _instrument: crate::exchange_listeners::Instrument,
         _crypto: crate::exchange_listeners::Crypto,
         _depth: OrderbookDepth,
         _price_update: &CryptoPriceUpdate,
     ) {
-        let orderbook_map = get_crypto_orderbook_map(_ctx.app_state.clone(), _crypto);
-        let prices_map = get_crypto_prices_map(_ctx.app_state.clone(), _crypto);
+        let orderbook_map = get_crypto_orderbook_map(ctx.app_state.clone(), _crypto);
+        let prices_map = get_crypto_prices_map(ctx.app_state.clone(), _crypto);
         let orderbook_key = (_exchange, _instrument, _depth);
 
         if let OrderbookDepth::L1 = _depth {
@@ -131,7 +132,7 @@ impl Strategy for UpdateCryptoOrderbookStrategy {
 
     fn crypto_handle_l2_snapshot(
         &self,
-        ctx: &crate::strategies::StrategyContext,
+        ctx: Arc<crate::strategies::StrategyContext>,
         exchange: crate::exchange_listeners::Exchange,
         instrument: crate::exchange_listeners::Instrument,
         crypto: crate::exchange_listeners::Crypto,
@@ -180,7 +181,7 @@ impl Strategy for UpdateCryptoOrderbookStrategy {
 
     fn crypto_handle_l2_update(
         &self,
-        ctx: &crate::strategies::StrategyContext,
+        ctx: Arc<crate::strategies::StrategyContext>,
         exchange: crate::exchange_listeners::Exchange,
         instrument: crate::exchange_listeners::Instrument,
         crypto: crate::exchange_listeners::Crypto,

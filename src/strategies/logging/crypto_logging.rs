@@ -3,6 +3,7 @@ use serde_json::{json, Map, Value};
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::Path;
+use std::sync::Arc;
 
 use crate::exchange_listeners::crypto_models::{get_crypto_prices_map, CryptoPriceUpdate};
 use crate::exchange_listeners::orderbooks::{OrderbookDepth, OrderbookLevel};
@@ -21,7 +22,7 @@ impl Strategy for CryptoLoggingStrategy {
 
     fn crypto_handle_price_update(
         &self,
-        ctx: &crate::strategies::StrategyContext,
+        ctx: Arc<StrategyContext>,
         exchange: Exchange,
         instrument: Instrument,
         crypto: Crypto,
@@ -57,7 +58,7 @@ impl Strategy for CryptoLoggingStrategy {
     // ADDED: This function will now log the initial state received from Kraken.
     fn crypto_handle_l2_snapshot(
         &self,
-        ctx: &crate::strategies::StrategyContext,
+        ctx: Arc<StrategyContext>,
         exchange: Exchange,
         instrument: Instrument,
         crypto: Crypto,
@@ -87,7 +88,7 @@ impl Strategy for CryptoLoggingStrategy {
 
     fn crypto_handle_l2_update(
         &self,
-        ctx: &crate::strategies::StrategyContext,
+        ctx: Arc<StrategyContext>,
         exchange: Exchange,
         instrument: Instrument,
         crypto: Crypto,

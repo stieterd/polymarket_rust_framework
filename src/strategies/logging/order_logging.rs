@@ -1,4 +1,5 @@
 use log::info;
+use std::sync::Arc;
 
 use crate::{
     exchange_listeners::{
@@ -25,12 +26,12 @@ impl Strategy for OrderLoggingStrategy {
 
     fn poly_handle_user_order(
         &self,
-        _ctx: &StrategyContext,
+        ctx: Arc<StrategyContext>,
         _listener: Listener,
         _payload: &crate::exchange_listeners::poly_models::OrderPayload,
     ) {
         // info!("Just received a message from {}", _exchange);
-        for asset_entry in _ctx.poly_state.open_orders.iter() {
+        for asset_entry in ctx.poly_state.open_orders.iter() {
             let asset_id = asset_entry.key();
             let asset_orders = asset_entry.value();
 

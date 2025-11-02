@@ -11,6 +11,7 @@ use crate::exchange_listeners::poly_models::{
 
 use crate::exchange_listeners::states::{AppState, PolyMarketState};
 use crate::strategies::{Strategy, StrategyContext};
+use std::sync::Arc;
 use dashmap::mapref::entry::Entry;
 use log::{debug, error, info, warn};
 use simd_json::{
@@ -20,7 +21,6 @@ use simd_json::{
 use simd_json::{to_borrowed_value, BorrowedValue};
 use std::str;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, RwLock};
 use tokio::sync::mpsc::{self, UnboundedSender};
 
 pub type SocketEventSender = UnboundedSender<SocketEvent>;
@@ -170,8 +170,11 @@ impl EventProcessor {
         }
     }
 
-    fn strategy_context(&self) -> StrategyContext {
-        StrategyContext::new(Arc::clone(&self.app_state), Arc::clone(&self.poly_state))
+    fn strategy_context(&self) -> Arc<StrategyContext> {
+        Arc::new(StrategyContext::new(
+            Arc::clone(&self.app_state),
+            Arc::clone(&self.poly_state),
+        ))
     }
 
     fn handle_price_update(
@@ -186,7 +189,7 @@ impl EventProcessor {
 
         for strategy in &self.strategies {
             strategy.crypto_handle_price_update(
-                &ctx,
+                Arc::clone(&ctx),
                 exchange,
                 instrument,
                 crypto,
@@ -206,7 +209,14 @@ impl EventProcessor {
     ) {
         let ctx = self.strategy_context();
         for strategy in &self.strategies {
-            strategy.crypto_handle_l2_snapshot(&ctx, exchange, instrument, crypto, bids, asks);
+            strategy.crypto_handle_l2_snapshot(
+                Arc::clone(&ctx),
+                exchange,
+                instrument,
+                crypto,
+                bids,
+                asks,
+            );
         }
     }
 
@@ -220,7 +230,14 @@ impl EventProcessor {
     ) {
         let ctx = self.strategy_context();
         for strategy in &self.strategies {
-            strategy.crypto_handle_l2_update(&ctx, exchange, instrument, crypto, bids, asks);
+            strategy.crypto_handle_l2_update(
+                Arc::clone(&ctx),
+                exchange,
+                instrument,
+                crypto,
+                bids,
+                asks,
+            );
         }
     }
 
@@ -244,7 +261,13 @@ impl EventProcessor {
             let ctx = self.strategy_context();
             for depth in depths {
                 for strategy in &self.strategies {
-                    strategy.crypto_handle_price_clear(&ctx, exchange, instrument, crypto, depth);
+                    strategy.crypto_handle_price_clear(
+                        Arc::clone(&ctx),
+                        exchange,
+                        instrument,
+                        crypto,
+                        depth,
+                    );
                 }
             }
         }
@@ -260,7 +283,7 @@ impl EventProcessor {
                 if t.eq_ignore_ascii_case("PONG") {
                     let ctx = self.strategy_context();
                     for strategy in &self.strategies {
-                        strategy.poly_handle_market_pong(&ctx, listener);
+                        strategy.poly_handle_market_pong(Arc::clone(&ctx), listener);
                     }
                     return;
                 }
@@ -324,7 +347,7 @@ impl EventProcessor {
             if t.eq_ignore_ascii_case("PONG") {
                 let ctx = self.strategy_context();
                 for strategy in &self.strategies {
-                    strategy.poly_handle_user_pong(&ctx, listener);
+                    strategy.poly_handle_user_pong(Arc::clone(&ctx), listener);
                 }
                 return;
             }
@@ -358,7 +381,7 @@ impl EventProcessor {
             "pong" => {
                 let ctx = self.strategy_context();
                 for strategy in &self.strategies {
-                    strategy.poly_handle_market_pong(&ctx, listener);
+                    strategy.poly_handle_market_pong(Arc::clone(&ctx), listener);
                 }
             }
             unknown_type => warn!(
@@ -426,7 +449,11 @@ impl EventProcessor {
                 // self.ensure_poly_orderbook(&snapshot);
 
                 for strategy in &self.strategies {
-                    strategy.poly_handle_market_agg_orderbook(&ctx, listener, &snapshot);
+                    strategy.poly_handle_market_agg_orderbook(
+                        Arc::clone(&ctx),
+                        listener,
+                        &snapshot,
+                    );
                 }
             }
         } else if let Ok(snapshot) =
@@ -435,7 +462,7 @@ impl EventProcessor {
             // self.ensure_poly_orderbook(&snapshot);
 
             for strategy in &self.strategies {
-                strategy.poly_handle_market_agg_orderbook(&ctx, listener, &snapshot);
+                strategy.poly_handle_market_agg_orderbook(Arc::clone(&ctx), listener, &snapshot);
             }
         } else {
             warn!(
@@ -494,7 +521,7 @@ impl EventProcessor {
                 side: change.side.clone(),
             };
             for strategy in &self.strategies {
-                strategy.poly_handle_market_price_change(&ctx, listener, &pc);
+                strategy.poly_handle_market_price_change(Arc::clone(&ctx), listener, &pc);
             }
         }
     }
@@ -503,7 +530,11 @@ impl EventProcessor {
         let ctx = self.strategy_context();
         for change in &payload_data.pc {
             for strategy in &self.strategies {
-                strategy.poly_handle_market_price_change(&ctx, listener, change);
+                strategy.poly_handle_market_price_change(
+                    Arc::clone(&ctx),
+                    listener,
+                    change,
+                );
             }
         }
     }
@@ -535,7 +566,7 @@ impl EventProcessor {
 
         let ctx = self.strategy_context();
         for strategy in &self.strategies {
-            strategy.poly_handle_market_agg_orderbook(&ctx, listener, &snapshot);
+            strategy.poly_handle_market_agg_orderbook(Arc::clone(&ctx), listener, &snapshot);
         }
     }
 
@@ -551,7 +582,11 @@ impl EventProcessor {
 
             let ctx = self.strategy_context();
             for strategy in &self.strategies {
-                strategy.poly_handle_market_tick_size_change(&ctx, listener, &payload_data);
+                strategy.poly_handle_market_tick_size_change(
+                    Arc::clone(&ctx),
+                    listener,
+                    &payload_data,
+                );
             }
         } else {
             warn!(
@@ -573,7 +608,11 @@ impl EventProcessor {
 
         let ctx = self.strategy_context();
         for strategy in &self.strategies {
-            strategy.poly_handle_market_tick_size_change(&ctx, listener, &ticksize_pl);
+            strategy.poly_handle_market_tick_size_change(
+                Arc::clone(&ctx),
+                listener,
+                &ticksize_pl,
+            );
         }
     }
 
@@ -581,7 +620,7 @@ impl EventProcessor {
         if let Ok(trade) = simd_json::serde::from_owned_value::<TradePayload>(payload.clone()) {
             let ctx = self.strategy_context();
             for strategy in &self.strategies {
-                strategy.poly_handle_user_trade(&ctx, listener, &trade);
+                strategy.poly_handle_user_trade(Arc::clone(&ctx), listener, &trade);
             }
         } else {
             warn!(
@@ -596,7 +635,7 @@ impl EventProcessor {
         if let Ok(order) = simd_json::serde::from_owned_value::<OrderPayload>(payload.clone()) {
             let ctx = self.strategy_context();
             for strategy in &self.strategies {
-                strategy.poly_handle_user_order(&ctx, listener, &order);
+                strategy.poly_handle_user_order(Arc::clone(&ctx), listener, &order);
             }
         } else {
             warn!("[PolyUser] Failed to parse order payload. Raw: {}", payload);

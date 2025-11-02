@@ -24,7 +24,7 @@ impl Strategy for UpdateOrderStrategy {
 
     fn poly_handle_user_order(
         &self,
-        _ctx: &crate::strategies::StrategyContext,
+        ctx: Arc<crate::strategies::StrategyContext>,
         _listener: Listener,
         _payload: &crate::exchange_listeners::poly_models::OrderPayload,
     ) {
@@ -102,7 +102,7 @@ impl Strategy for UpdateOrderStrategy {
                 //     original_size
                 // );
 
-                let order_arc_opt = _ctx
+                let order_arc_opt = ctx
                     .poly_state
                     .open_orders
                     .get_mut(asset_id)
@@ -158,7 +158,7 @@ impl Strategy for UpdateOrderStrategy {
                 // );
 
                 if status.eq_ignore_ascii_case("LIVE") {
-                    let order_arc_opt = _ctx
+                    let order_arc_opt = ctx
                         .poly_state
                         .open_orders
                         .get_mut(asset_id)
@@ -200,7 +200,7 @@ impl Strategy for UpdateOrderStrategy {
                         }
                     }
                 } else if status.eq_ignore_ascii_case("MATCHED") {
-                    if let Some(asset_orders) = _ctx.poly_state.open_orders.get_mut(asset_id) {
+                    if let Some(asset_orders) = ctx.poly_state.open_orders.get_mut(asset_id) {
                         match OrderSide::from_str(side.as_str()) {
                             Some(OrderSide::Buy) => {
                                 if asset_orders.bids.remove(&(price_u32, size_u32)).is_none() {
@@ -247,7 +247,7 @@ impl Strategy for UpdateOrderStrategy {
                 //     original_size
                 // );
 
-                if let Some(asset_orders) = _ctx.poly_state.open_orders.get_mut(asset_id) {
+                if let Some(asset_orders) = ctx.poly_state.open_orders.get_mut(asset_id) {
                     match OrderSide::from_str(side.as_str()) {
                         Some(OrderSide::Buy) => {
                             if asset_orders.bids.remove(&(price_u32, size_u32)).is_none() {
@@ -296,7 +296,7 @@ impl Strategy for UpdateOrderStrategy {
 
     fn poly_handle_user_trade(
         &self,
-        _ctx: &crate::strategies::StrategyContext,
+        ctx: Arc<crate::strategies::StrategyContext>,
         _listener: Listener,
         _payload: &crate::exchange_listeners::poly_models::TradePayload,
     ) {
@@ -338,7 +338,7 @@ impl Strategy for UpdateOrderStrategy {
                     }
                 };
 
-                if let Some(asset_orders) = _ctx.poly_state.open_orders.get_mut(&asset_id) {
+                if let Some(asset_orders) = ctx.poly_state.open_orders.get_mut(&asset_id) {
                     match OrderSide::from_str(_payload.side.as_str()) {
                         Some(OrderSide::Buy) => {
                             if asset_orders.bids.remove(&(price_u32, size_u32)).is_none() {

@@ -18,6 +18,7 @@ pub fn parse_millis(numeric: &str) -> Result<u32, String> {
 
 
 impl StrategyOrderBook{
+
     pub fn price_matches_top_of_book(orderbook: &OrderBook, price: u32) -> bool {
         let bid_matches = orderbook
             .best_bid()

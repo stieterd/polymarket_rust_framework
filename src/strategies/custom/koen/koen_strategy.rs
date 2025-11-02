@@ -28,13 +28,13 @@ impl Strategy for KoenStrategy {
 
     fn poly_handle_market_price_change(
         &self,
-        _ctx: &StrategyContext,
+        ctx: Arc<StrategyContext>,
         _listener: Listener,
         _payload: &PriceChange,
     ) {
         let asset_id = &_payload.asset_id;
 
-        if let Some(orderbook_entry) = _ctx.poly_state.orderbooks.get(asset_id) {
+        if let Some(orderbook_entry) = ctx.poly_state.orderbooks.get(asset_id) {
             if let Ok(orderbook) = orderbook_entry.read() {
                 let price_u32 = match _payload.price.parse::<f64>() {
                     Ok(price_f) => (price_f * 1000.0).round() as u32,

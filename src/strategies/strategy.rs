@@ -31,7 +31,7 @@ pub trait Strategy: Send + Sync {
     // Gets called by market socket on a market trade
     fn poly_handle_market_agg_orderbook(
         &self,
-        _ctx: &StrategyContext,
+        _ctx: Arc<StrategyContext>,
         _listener: Listener,
         _snapshot: &AggOrderbook,
     ) {
@@ -40,7 +40,7 @@ pub trait Strategy: Send + Sync {
     // Gets called by market socket on a new limit order placement
     fn poly_handle_market_price_change(
         &self,
-        _ctx: &StrategyContext,
+        _ctx: Arc<StrategyContext>,
         _listener: Listener,
         _payload: &PriceChange,
     ) {
@@ -49,22 +49,22 @@ pub trait Strategy: Send + Sync {
     // Gets called by market socket whenever the tick size changes
     fn poly_handle_market_tick_size_change(
         &self,
-        _ctx: &StrategyContext,
+        _ctx: Arc<StrategyContext>,
         _listener: Listener,
         _payload: &TickSizeChangePayload,
     ) {
     }
 
     // Gets called by market socket on a pong message
-    fn poly_handle_market_pong(&self, _ctx: &StrategyContext, _listener: Listener) {}
+    fn poly_handle_market_pong(&self, _ctx: Arc<StrategyContext>, _listener: Listener) {}
 
     // Gets called by user socket on a pong message
-    fn poly_handle_user_pong(&self, _ctx: &StrategyContext, _listener: Listener) {}
+    fn poly_handle_user_pong(&self, _ctx: Arc<StrategyContext>, _listener: Listener) {}
 
     // Gets called by user socket on a new trade message
     fn poly_handle_user_trade(
         &self,
-        _ctx: &StrategyContext,
+        _ctx: Arc<StrategyContext>,
         _listener: Listener,
         _payload: &TradePayload,
     ) {
@@ -73,7 +73,7 @@ pub trait Strategy: Send + Sync {
     // Gets called by user socket on a new placed order message [LIVE, CANCELLED]
     fn poly_handle_user_order(
         &self,
-        _ctx: &StrategyContext,
+        _ctx: Arc<StrategyContext>,
         _listener: Listener,
         _payload: &OrderPayload,
     ) {
@@ -81,7 +81,7 @@ pub trait Strategy: Send + Sync {
 
     fn crypto_handle_price_update(
         &self,
-        _ctx: &StrategyContext,
+        _ctx: Arc<StrategyContext>,
         _exchange: Exchange,
         _instrument: Instrument,
         _crypto: Crypto,
@@ -92,7 +92,7 @@ pub trait Strategy: Send + Sync {
 
     fn crypto_handle_l2_snapshot(
         &self,
-        _ctx: &StrategyContext,
+        _ctx: Arc<StrategyContext>,
         _exchange: Exchange,
         _instrument: Instrument,
         _crypto: Crypto,
@@ -103,7 +103,7 @@ pub trait Strategy: Send + Sync {
 
     fn crypto_handle_l2_update(
         &self,
-        _ctx: &StrategyContext,
+        _ctx: Arc<StrategyContext>,
         _exchange: Exchange,
         _instrument: Instrument,
         _crypto: Crypto,
@@ -114,7 +114,7 @@ pub trait Strategy: Send + Sync {
 
     fn crypto_handle_price_clear(
         &self,
-        _ctx: &StrategyContext,
+        _ctx: Arc<StrategyContext>,
         _exchange: Exchange,
         _instrument: Instrument,
         _crypto: Crypto,

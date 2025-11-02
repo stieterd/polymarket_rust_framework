@@ -26,15 +26,15 @@ impl Strategy for UpdateCryptoPriceStrategy {
 
     fn crypto_handle_price_update(
         &self,
-        _ctx: &crate::strategies::StrategyContext,
+        ctx: Arc<crate::strategies::StrategyContext>,
         _exchange: crate::exchange_listeners::Exchange,
         _instrument: crate::exchange_listeners::Instrument,
         _crypto: crate::exchange_listeners::Crypto,
         _depth: OrderbookDepth,
         _price_update: &CryptoPriceUpdate,
     ) {
-        let orderbook_map = get_crypto_orderbook_map(_ctx.app_state.clone(), _crypto);
-        let prices_map = get_crypto_prices_map(_ctx.app_state.clone(), _crypto);
+        let orderbook_map = get_crypto_orderbook_map(ctx.app_state.clone(), _crypto);
+        let prices_map = get_crypto_prices_map(ctx.app_state.clone(), _crypto);
 
         let key = (_exchange, _instrument, _depth);
 

@@ -13,7 +13,7 @@ use crate::{
         poly_models::{LegacyPriceChange, Listener, OrderSide, PriceChange},
     },
     strategies::{
-        Strategy, StrategyContext, custom::peter::models::{MAX_VOLUME, OrderBookContext}, strategy_utils::{StrategyAsset, StrategyClient, StrategyOpenOrder, StrategyOrderBook, parse_millis_or_log}
+        Strategy, StrategyContext, custom::peter::models::{MAX_VOLUME, OrderBookContext}, strategy_utils::{StrategyAsset, StrategyClient, StrategyOpenOrder, StrategyOrderBook, parse_millis}
     },
 };
 
@@ -131,15 +131,26 @@ impl Strategy for PeterStrategy {
     ) {
         let asset_id = &_payload.asset_id;
 
-        let price_u32 = match parse_millis_or_log(&_payload.price, "price", asset_id, self.name())
-        {
-            Some(price) => price,
-            None => return,
+        let price_u32 = match parse_millis(&_payload.price) {
+            Ok(price) => price,
+            Err(err) => {
+                error!(
+                    "[{}] Failed to parse price '{}' for {}: {}",
+                    self.name(), _payload.price, asset_id, err
+                );
+                return;
+            }
         };
 
-        let size_u32 = match parse_millis_or_log(&_payload.size, "size", asset_id, self.name()) {
-            Some(size) => size,
-            None => return,
+        let size_u32 = match parse_millis(&_payload.size) {
+            Ok(size) => size,
+            Err(err) => {
+                error!(
+                    "[{}] Failed to parse size '{}' for {}: {}",
+                    self.name(), _payload.size, asset_id, err
+                );
+                return;
+            }
         };
 
         if let Some(orderbook_entry) = ctx.poly_state.orderbooks.get(asset_id) {
@@ -148,6 +159,7 @@ impl Strategy for PeterStrategy {
                     return;
                 }
 
+                // The price dropped
                 if size_u32 == 0 {
                     self.record_orderbook_context(&orderbook);
                 }

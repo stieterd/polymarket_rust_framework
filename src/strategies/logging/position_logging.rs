@@ -1,4 +1,5 @@
 use log::info;
+use std::sync::Arc;
 
 use crate::{
     exchange_listeners::{
@@ -25,12 +26,12 @@ impl Strategy for PositionLoggingStrategy {
 
     fn poly_handle_user_trade(
         &self,
-        _ctx: &StrategyContext,
+        ctx: Arc<StrategyContext>,
         _listener: Listener,
         _payload: &crate::exchange_listeners::poly_models::TradePayload,
     ) {
         // info!("Just received a message from {}", _exchange);
-        for entry in _ctx.poly_state.positions.iter() {
+        for entry in ctx.poly_state.positions.iter() {
             let asset_id = entry.key();
             let position_lock = entry.value();
             if let Ok(position) = position_lock.read() {

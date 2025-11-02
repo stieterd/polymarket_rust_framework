@@ -4,6 +4,7 @@ pub mod poly_state_updates;
 
 pub mod custom;
 pub mod strategy;
+pub mod strategy_utils;
 
 pub use poly_state_updates::{
     update_orderbooks::UpdateOrderbookStrategy, update_orders::UpdateOrderStrategy,
