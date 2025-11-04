@@ -56,7 +56,7 @@ use crate::{
     marketmaking::poly_market_struct::events_json_to_events_with_market_map,
     strategies::{
         app_state_updates::update_crypto_orderbooks::UpdateCryptoOrderbookStrategy,
-        custom::peter::peter_strategy::PeterStrategy,
+        custom::{koen::koen_strategy::KoenStrategy, peter::peter_strategy::PeterStrategy},
         logging::{
             bbo_logging::BBOLoggingStrategy, crypto_logging::CryptoLoggingStrategy,
             main_logging::MainLoggingStrategy, order_logging::OrderLoggingStrategy,
