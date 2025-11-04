@@ -99,7 +99,7 @@ async fn debug_main() {
         Arc::new(UpdatePositionStrategy::new()),
         Arc::new(PeterStrategy::new()),
         // Arc::new(OrderLoggingStrategy::new()),
-        // Arc::new(PositionLoggingStrategy::new()),
+        Arc::new(PositionLoggingStrategy::new()),
 
         // Arc::new(UpdateCryptoOrderbookStrategy::new()),
         // Arc::new(BBOLoggingStrategy::new()),

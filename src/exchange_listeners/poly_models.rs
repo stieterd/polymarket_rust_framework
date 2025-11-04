@@ -81,11 +81,11 @@ impl std::fmt::Display for Listener {
 #[derive(Debug, Clone)]
 pub struct Position {
     pub asset_id: String,
-    pub size: f64,
+    pub size: u32,
 }
 
 impl Position {
-    pub fn new(asset_id: impl Into<String>, size: f64) -> Self {
+    pub fn new(asset_id: impl Into<String>, size: u32) -> Self {
         Self {
             asset_id: asset_id.into(),
             size,
@@ -97,7 +97,7 @@ impl Default for Position {
     fn default() -> Self {
         Self {
             asset_id: String::new(),
-            size: 0.0,
+            size: 0,
         }
     }
 }
@@ -295,6 +295,12 @@ impl fmt::Display for OrderEventType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AssetSide {
+    YES,
+    NO,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

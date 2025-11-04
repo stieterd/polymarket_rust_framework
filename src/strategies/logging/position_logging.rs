@@ -3,10 +3,7 @@ use std::sync::Arc;
 
 use crate::{
     exchange_listeners::{
-        crypto_models::CryptoPriceUpdate,
-        orderbooks::{poly_orderbook::OrderBook, CryptoOrderbook, OrderbookDepth},
-        poly_models::{LegacyPriceChange, Listener, PriceChange},
-        Crypto, Exchange, Instrument,
+        Crypto, Exchange, Instrument, crypto_models::CryptoPriceUpdate, orderbooks::{CryptoOrderbook, OrderbookDepth, poly_orderbook::OrderBook}, poly_models::{LegacyPriceChange, Listener, PriceChange, TradeStatus}
     },
     strategies::{Strategy, StrategyContext},
 };
@@ -30,6 +27,9 @@ impl Strategy for PositionLoggingStrategy {
         _listener: Listener,
         _payload: &crate::exchange_listeners::poly_models::TradePayload,
     ) {
+        if _payload.status != TradeStatus::Matched {
+            return;
+        }
         // info!("Just received a message from {}", _exchange);
         for entry in ctx.poly_state.positions.iter() {
             let asset_id = entry.key();

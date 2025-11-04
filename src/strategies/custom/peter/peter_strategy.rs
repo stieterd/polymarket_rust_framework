@@ -1,4 +1,4 @@
-use log::error;
+use log::{error, info};
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
@@ -13,7 +13,7 @@ use crate::{
         poly_models::{LegacyPriceChange, Listener, OrderSide, PriceChange},
     },
     strategies::{
-        Strategy, StrategyContext, custom::peter::models::{MAX_VOLUME, OrderBookContext}, strategy_utils::{StrategyAsset, StrategyClient, StrategyOpenOrder, StrategyOrderBook, parse_millis}
+        Strategy, StrategyContext, custom::peter::models::{MAX_VOLUME, OrderBookContext, TARGET_ORDER_SIZE}, strategy_utils::{StrategyAsset, StrategyClient, StrategyOpenOrder, StrategyOrderBook, StrategyPosition, parse_millis}
     },
 };
 
@@ -28,7 +28,6 @@ struct PlannedOrder {
 }
 
 impl PeterStrategy {
-    const TARGET_ORDER_SIZE: u32 = 10_000;
 
     pub fn new() -> Self {
         Self {
@@ -63,30 +62,61 @@ impl PeterStrategy {
             return None;
         }
 
+        let market_assets = StrategyAsset::get_yes_and_no(ctx, asset_id);
+        let positions = StrategyPosition::assets_position_map(ctx, &market_assets);
+
+        let current_position = *positions.get(asset_id).unwrap_or(&0);
+        let other_asset = market_assets.iter().find(|&&ref id| id != asset_id);
+
+        let other_position = other_asset
+            .and_then(|id| positions.get(id))
+            .copied()
+            .unwrap_or(0);
+
+
+        if current_position.saturating_sub(other_position) >= TARGET_ORDER_SIZE {
+            return None;
+        }
+
         if let Ok(rate_limit) = ctx.poly_state.rate_limit.read() {
             if rate_limit.should_wait() {
                 return None;
             }
         }
 
-        let exists = StrategyOpenOrder::order_exists(ctx, asset_id, OrderSide::Buy, bid_price, Self::TARGET_ORDER_SIZE);
+        let exists = StrategyOpenOrder::order_exists(ctx, asset_id, OrderSide::Buy, bid_price, TARGET_ORDER_SIZE);
 
         if exists {
             return None;
         }
 
+        
+        // info!("{:?} - {:?}: {:?}", current_position, other_position, bid_price);
+
         Some(PlannedOrder {
             price: bid_price,
-            size: Self::TARGET_ORDER_SIZE,
+            size: TARGET_ORDER_SIZE,
             tick_size: orderbook.get_tick_size().to_string(),
         })
     }
 
     fn execute_order_plan(&self, ctx: Arc<StrategyContext>, asset_id: &str, plan: PlannedOrder) {
 
-        let negrisk = StrategyAsset::is_negrisk(ctx.as_ref(), asset_id);
+        let negrisk = StrategyAsset::is_negrisk(&ctx.clone(), asset_id);
         let asset_id_owned = asset_id.to_string();
         let tick_size_owned = plan.tick_size.clone();
+
+        let market_assets = StrategyAsset::get_yes_and_no(&ctx.clone(), asset_id);
+        let positions = StrategyPosition::assets_position_map(&ctx, &market_assets);
+        
+        let current_position = *positions.get(asset_id).unwrap_or(&0);
+        let other_asset = market_assets.iter().find(|&&ref id| id != asset_id);
+
+        let other_position = other_asset
+            .and_then(|id| positions.get(id))
+            .copied()
+            .unwrap_or(0);
+
 
         let orders_to_cancel = StrategyOpenOrder::collect_orders_asset(ctx.as_ref(), asset_id);
         if let Err(err) = StrategyClient::cancel_orders(Arc::clone(&ctx), asset_id, orders_to_cancel)
@@ -130,6 +160,12 @@ impl Strategy for PeterStrategy {
         _payload: &PriceChange,
     ) {
         let asset_id = &_payload.asset_id;
+
+        let market = StrategyAsset::get_market(&ctx, asset_id);
+        let slug = market.slug.clone().unwrap();
+        if !slug.eq_ignore_ascii_case("will-zohran-mamdani-win-the-2025-nyc-mayoral-election") {
+            return;
+        }
 
         let price_u32 = match parse_millis(&_payload.price) {
             Ok(price) => price,

@@ -1,19 +1,17 @@
 use std::str::FromStr;
 
 use ethers::{
-    types::H256,
+    types::{Address, H256},
     utils::{keccak256, to_checksum},
 };
-use reqwest::header::{self, HeaderMap, HeaderName, HeaderValue};
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde_json::{json, Map, Value};
 use tiny_keccak::{Hasher, Keccak};
 
-use crate::credentials::{ADDRESS, POLY_API_KEY, POLY_API_PASSPHRASE, PRIVATE_KEY};
-
 use super::{
     builder::{encode_order, encode_uint256, Order, OrderData, MESSAGE_PREFIX, TYPE_HASH},
-    clob_types::OrderArgs,
-    constants::{POLYGON, ZERO_ADDRESS},
+    clob_types::ApiCreds,
+    constants::ZERO_ADDRESS,
     signer::PolySigner,
     utils::{generate_seed, prepend_zx},
 };
@@ -53,9 +51,13 @@ pub fn update_encoded_order(
     encoded[taker_amount_start..taker_amount_start + 32].copy_from_slice(&taker_amount_encoded);
 }
 
-pub fn build_prebuilt_order() -> PrebuiltOrder {
-    let funder = Some(*ADDRESS);
-    let signer = PolySigner::new(PRIVATE_KEY, POLYGON);
+pub fn build_prebuilt_order(
+    creds: &ApiCreds,
+    signer: &PolySigner,
+    funder: Address,
+) -> PrebuiltOrder {
+    let funder = Some(funder);
+    let signer = signer.clone();
 
     // let (side, maker_amount, taker_amount) = self.get_order_amounts(&order_args.side, order_args.size, order_args.price, &ROUND_CONFIG.get(options.tick_size).unwrap()).unwrap();
 
@@ -135,11 +137,11 @@ pub fn build_prebuilt_order() -> PrebuiltOrder {
     // headers.insert(HeaderName::from_str("POLY_TIMESTAMP").unwrap(), HeaderValue::from_str(&timestamp).unwrap()); --> need to do this after we get them entries correct
     headers.insert(
         HeaderName::from_str("POLY_API_KEY").unwrap(),
-        HeaderValue::from_str(POLY_API_KEY).unwrap(),
+        HeaderValue::from_str(&creds.api_key).unwrap(),
     );
     headers.insert(
         HeaderName::from_str("POLY_PASSPHRASE").unwrap(),
-        HeaderValue::from_str(POLY_API_PASSPHRASE).unwrap(),
+        HeaderValue::from_str(&creds.api_pass).unwrap(),
     );
     headers.insert(
         HeaderName::from_str("User-Agent").unwrap(),
@@ -185,7 +187,7 @@ pub fn build_prebuilt_order() -> PrebuiltOrder {
     // Construct the final JSON object
     let body = json!({
         "order": order_value,
-        "owner": POLY_API_KEY.to_string(),
+        "owner": creds.api_key.clone(),
         "orderType": "GTC"
     });
 

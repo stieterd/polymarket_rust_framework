@@ -5,17 +5,15 @@ use crate::clob_client::endpoints::{GET_BALANCE_ALLOWANCE, GET_LAST_TRADES_PRICE
 use crate::clob_client::http_helpers::{
     add_balance_allowance_params_to_url, build_query_params, get,
 };
-use crate::marketmaking::marketmakingclient::CLIENT;
 use ethers::abi::token;
-use ethers::types::{Address, H256};
-use reqwest::header::{self, HeaderMap, HeaderName, HeaderValue};
+use ethers::types::Address;
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde_json::Value;
 use std::error::Error;
 use std::process;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tiny_keccak::{Hasher, Keccak};
 use tokio::task;
-
 use super::builder::{get_order_amounts, OrderBuilder, SignedOrder, ROUND_CONFIG};
 use super::clob_types::{ApiCreds, CreateOrderOptions, OrderArgs};
 use super::constants::{HOST, L2, POLYGON};
@@ -23,7 +21,7 @@ use super::endpoints::{CANCEL_ALL, CANCEL_ORDERS};
 use super::headers::create_level_2_headers;
 use super::hmac::build_hmac_signature;
 use super::http_helpers::post;
-use super::prebuilt_order::{update_encoded_order, PrebuiltOrder};
+use super::prebuilt_order::PrebuiltOrder;
 use super::signer::PolySigner;
 use super::utils::{order_to_json, prepend_zx};
 use super::{clob_types::RequestArgs, http_helpers::delete};
@@ -171,6 +169,14 @@ impl ClobClient {
         };
         // self.builder.create_order();
         self.builder.create_order(order_args, &order_options)
+    }
+
+    pub fn build_prebuilt_order(&self) -> PrebuiltOrder {
+        super::prebuilt_order::build_prebuilt_order(
+            &self.creds,
+            &self.signer,
+            self.builder.funder,
+        )
     }
 
     pub async fn post_taker_order(

@@ -8,6 +8,7 @@ use std::path::Path;
 use crate::exchange_listeners::poly_models::{AggOrderbook, Listener, PriceChange};
 use crate::strategies::StrategyContext;
 use crate::Strategy;
+use crate::strategies::strategy_utils::StrategyAsset;
 
 #[derive(Default)]
 pub struct BBOLoggingStrategy;
@@ -84,6 +85,12 @@ impl Strategy for BBOLoggingStrategy {
     ) {
         let asset_id = &_payload.asset_id;
 
+        let yes_market = StrategyAsset::is_yes_market(&ctx.clone(), asset_id);
+        
+        if !yes_market{
+            return;
+        }
+
         if let Some(orderbook_entry) = ctx.poly_state.orderbooks.get(asset_id) {
             if let Ok(orderbook) = orderbook_entry.read() {
                 let price_u32 = match _payload.price.parse::<f64>() {
@@ -99,6 +106,7 @@ impl Strategy for BBOLoggingStrategy {
 
                 let best_bid = orderbook.best_bid();
                 let best_ask = orderbook.best_ask();
+
 
                 let matches_best = best_bid
                     .map(|(price, _)| price == price_u32)
