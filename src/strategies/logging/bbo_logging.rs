@@ -1,14 +1,14 @@
 use log::error;
 use serde_json::{json, Map, Value};
-use std::sync::Arc;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::Path;
+use std::sync::Arc;
 
 use crate::exchange_listeners::poly_models::{AggOrderbook, Listener, PriceChange};
+use crate::strategies::strategy_utils::StrategyAsset;
 use crate::strategies::StrategyContext;
 use crate::Strategy;
-use crate::strategies::strategy_utils::StrategyAsset;
 
 #[derive(Default)]
 pub struct BBOLoggingStrategy;
@@ -86,8 +86,8 @@ impl Strategy for BBOLoggingStrategy {
         let asset_id = &_payload.asset_id;
 
         let yes_market = StrategyAsset::is_yes_market(&ctx.clone(), asset_id);
-        
-        if !yes_market{
+
+        if !yes_market {
             return;
         }
 
@@ -106,7 +106,6 @@ impl Strategy for BBOLoggingStrategy {
 
                 let best_bid = orderbook.best_bid();
                 let best_ask = orderbook.best_ask();
-
 
                 let matches_best = best_bid
                     .map(|(price, _)| price == price_u32)

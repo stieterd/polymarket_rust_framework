@@ -2,10 +2,11 @@ use log::{error, info};
 use std::sync::Arc;
 
 use crate::{
-    exchange_listeners::{
-        poly_models::{Listener, OrderSide, PriceChange},
+    exchange_listeners::poly_models::{Listener, OrderSide, PriceChange},
+    strategies::{
+        strategy_utils::{parse_millis, StrategyAsset, StrategyClient},
+        Strategy, StrategyContext,
     },
-    strategies::{Strategy, StrategyContext, strategy_utils::{parse_millis, StrategyAsset, StrategyClient}},
 };
 
 pub struct KoenStrategy {
@@ -22,10 +23,10 @@ pub struct KoenStrategy {
 impl KoenStrategy {
     pub fn new() -> Self {
         Self {
-            max_spread: 0.10, // Maximum spread (10%)
+            max_spread: 0.10,        // Maximum spread (10%)
             price_lower_bound: 0.05, // Lower price bound (0.01)
             price_upper_bound: 0.95, // Upper price bound (0.99)
-            hedging_cost: 0.001, // Hedging cost (0.5%)
+            hedging_cost: 0.001,     // Hedging cost (0.5%)
             // Dummy linear model coefficients
             model_coef_gap: 0.1,
             model_coef_f: 0.2,
@@ -55,17 +56,21 @@ impl Strategy for KoenStrategy {
                     Err(err) => {
                         error!(
                             "[{}] Failed to parse price '{}' for {}: {}",
-                            self.name(), _payload.price, asset_id, err
+                            self.name(),
+                            _payload.price,
+                            asset_id,
+                            err
                         );
                         return;
                     }
                 };
 
                 // Only process if this price change affects top of book
-                let (best_bid_price, best_ask_price) = match (orderbook.best_bid(), orderbook.best_ask()) {
-                    (Some((bid_p, _)), Some((ask_p, _))) => (bid_p, ask_p),
-                    _ => return, // No valid top of book
-                };
+                let (best_bid_price, best_ask_price) =
+                    match (orderbook.best_bid(), orderbook.best_ask()) {
+                        (Some((bid_p, _)), Some((ask_p, _))) => (bid_p, ask_p),
+                        _ => return, // No valid top of book
+                    };
 
                 if price_u32 != best_bid_price && price_u32 != best_ask_price {
                     return;
@@ -82,26 +87,28 @@ impl Strategy for KoenStrategy {
                 }
 
                 // Extract top 2 bids and asks
-                let b1 = orderbook.best_bid();           // Best bid (b1_price, b1_volume)
-                let a1 = orderbook.best_ask();           // Best ask (a1_price, a1_volume)
+                let b1 = orderbook.best_bid(); // Best bid (b1_price, b1_volume)
+                let a1 = orderbook.best_ask(); // Best ask (a1_price, a1_volume)
 
                 if let (Some(b1), Some(a1)) = (b1, a1) {
                     let (b1_price, b1v) = b1;
                     let (a1_price, a1v) = a1;
-                    
+
                     // Extract second best bid and ask by sorting the maps
-                    let mut bids_sorted: Vec<(u32, u32)> = orderbook.get_bid_map()
+                    let mut bids_sorted: Vec<(u32, u32)> = orderbook
+                        .get_bid_map()
                         .iter()
                         .map(|entry| (*entry.key(), *entry.value()))
                         .collect();
                     bids_sorted.sort_by(|a, b| b.cmp(a)); // Sort descending (best first)
-                    
-                    let mut asks_sorted: Vec<(u32, u32)> = orderbook.get_ask_map()
+
+                    let mut asks_sorted: Vec<(u32, u32)> = orderbook
+                        .get_ask_map()
                         .iter()
                         .map(|entry| (*entry.key(), *entry.value()))
                         .collect();
                     asks_sorted.sort(); // Sort ascending (best first)
-                    
+
                     // Check that second best bids and asks exist
                     let (b2_price, b2v) = match bids_sorted.get(1) {
                         Some(entry) => *entry,
@@ -159,10 +166,10 @@ impl Strategy for KoenStrategy {
                     );
 
                     // Run linear regression model to predict return
-                    let predicted_delta = self.model_coef_gap * gap 
-                        + self.model_coef_f * f 
+                    let predicted_delta = self.model_coef_gap * gap
+                        + self.model_coef_f * f
                         + self.model_coef_swmid_final * swmid_final;
-                    
+
                     // Calculate predicted price
                     let predicted_price = mid_price + predicted_delta;
 
@@ -175,7 +182,10 @@ impl Strategy for KoenStrategy {
 
                         info!(
                             "[{}] BUY signal - Predicted: {:.6}, Ask: {:.6}, Delta: {:.6}",
-                            self.name(), predicted_price, a1_price_f, predicted_delta
+                            self.name(),
+                            predicted_price,
+                            a1_price_f,
+                            predicted_delta
                         );
 
                         if let Err(err) = StrategyClient::place_limit_order(
@@ -187,10 +197,7 @@ impl Strategy for KoenStrategy {
                             tick_size,
                             negrisk,
                         ) {
-                            error!(
-                                "[{}] Failed to place BUY order: {}",
-                                self.name(), err
-                            );
+                            error!("[{}] Failed to place BUY order: {}", self.name(), err);
                         }
                     }
 
@@ -203,7 +210,10 @@ impl Strategy for KoenStrategy {
 
                         info!(
                             "[{}] SELL signal - Predicted: {:.6}, Bid: {:.6}, Delta: {:.6}",
-                            self.name(), predicted_price, b1_price_f, predicted_delta
+                            self.name(),
+                            predicted_price,
+                            b1_price_f,
+                            predicted_delta
                         );
 
                         if let Err(err) = StrategyClient::place_limit_order(
@@ -215,10 +225,7 @@ impl Strategy for KoenStrategy {
                             tick_size,
                             negrisk,
                         ) {
-                            error!(
-                                "[{}] Failed to place SELL order: {}",
-                                self.name(), err
-                            );
+                            error!("[{}] Failed to place SELL order: {}", self.name(), err);
                         }
                     }
                 }

@@ -1,19 +1,3 @@
-use crate::clob_client::builder::encode_order;
-use crate::clob_client::clob_types::{BalanceAllowanceParameters, OpenOrderParams};
-use crate::clob_client::constants::END_CURSOR;
-use crate::clob_client::endpoints::{GET_BALANCE_ALLOWANCE, GET_LAST_TRADES_PRICES, ORDERS};
-use crate::clob_client::http_helpers::{
-    add_balance_allowance_params_to_url, build_query_params, get,
-};
-use ethers::abi::token;
-use ethers::types::Address;
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
-use serde_json::Value;
-use std::error::Error;
-use std::process;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use tiny_keccak::{Hasher, Keccak};
-use tokio::task;
 use super::builder::{get_order_amounts, OrderBuilder, SignedOrder, ROUND_CONFIG};
 use super::clob_types::{ApiCreds, CreateOrderOptions, OrderArgs};
 use super::constants::{HOST, L2, POLYGON};
@@ -25,10 +9,26 @@ use super::prebuilt_order::PrebuiltOrder;
 use super::signer::PolySigner;
 use super::utils::{order_to_json, prepend_zx};
 use super::{clob_types::RequestArgs, http_helpers::delete};
+use crate::clob_client::builder::encode_order;
+use crate::clob_client::clob_types::{BalanceAllowanceParameters, OpenOrderParams};
+use crate::clob_client::constants::END_CURSOR;
+use crate::clob_client::endpoints::{GET_BALANCE_ALLOWANCE, GET_LAST_TRADES_PRICES, ORDERS};
+use crate::clob_client::http_helpers::{
+    add_balance_allowance_params_to_url, build_query_params, get,
+};
+use ethers::abi::token;
+use ethers::types::Address;
 use ethers::utils::{keccak256, to_checksum};
 use num_cpus;
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+use serde_json::Value;
+use std::error::Error;
+use std::process;
 use std::str::FromStr;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use tiny_keccak::{Hasher, Keccak};
 use tokio::runtime::{Builder, Runtime};
+use tokio::task;
 
 fn convert_vec_to_json_value(strings: &[&str]) -> Option<Value> {
     if strings.is_empty() {
@@ -172,11 +172,7 @@ impl ClobClient {
     }
 
     pub fn build_prebuilt_order(&self) -> PrebuiltOrder {
-        super::prebuilt_order::build_prebuilt_order(
-            &self.creds,
-            &self.signer,
-            self.builder.funder,
-        )
+        super::prebuilt_order::build_prebuilt_order(&self.creds, &self.signer, self.builder.funder)
     }
 
     pub async fn post_taker_order(

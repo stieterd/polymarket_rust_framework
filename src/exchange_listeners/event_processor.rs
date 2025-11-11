@@ -11,7 +11,6 @@ use crate::exchange_listeners::poly_models::{
 
 use crate::exchange_listeners::states::{AppState, PolyMarketState};
 use crate::strategies::{Strategy, StrategyContext};
-use std::sync::Arc;
 use dashmap::mapref::entry::Entry;
 use log::{debug, error, info, warn};
 use simd_json::{
@@ -21,6 +20,7 @@ use simd_json::{
 use simd_json::{to_borrowed_value, BorrowedValue};
 use std::str;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use tokio::sync::mpsc::{self, UnboundedSender};
 
 pub type SocketEventSender = UnboundedSender<SocketEvent>;
@@ -530,11 +530,7 @@ impl EventProcessor {
         let ctx = self.strategy_context();
         for change in &payload_data.pc {
             for strategy in &self.strategies {
-                strategy.poly_handle_market_price_change(
-                    Arc::clone(&ctx),
-                    listener,
-                    change,
-                );
+                strategy.poly_handle_market_price_change(Arc::clone(&ctx), listener, change);
             }
         }
     }
@@ -608,11 +604,7 @@ impl EventProcessor {
 
         let ctx = self.strategy_context();
         for strategy in &self.strategies {
-            strategy.poly_handle_market_tick_size_change(
-                Arc::clone(&ctx),
-                listener,
-                &ticksize_pl,
-            );
+            strategy.poly_handle_market_tick_size_change(Arc::clone(&ctx), listener, &ticksize_pl);
         }
     }
 

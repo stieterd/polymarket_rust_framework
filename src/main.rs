@@ -4,7 +4,6 @@ pub mod config;
 pub mod credentials;
 pub mod marketmaking;
 pub mod poly_orderbooks;
-pub mod popular_tokens;
 pub mod strategies;
 
 use itertools::Itertools;
@@ -56,7 +55,7 @@ use crate::{
     marketmaking::poly_market_struct::events_json_to_events_with_market_map,
     strategies::{
         app_state_updates::update_crypto_orderbooks::UpdateCryptoOrderbookStrategy,
-        custom::{koen::koen_strategy::KoenStrategy, peter::peter_strategy::PeterStrategy},
+        custom::{koen::koen_strategy::KoenStrategy, tob::tob_strategy::TobStrategy},
         logging::{
             bbo_logging::BBOLoggingStrategy, crypto_logging::CryptoLoggingStrategy,
             main_logging::MainLoggingStrategy, order_logging::OrderLoggingStrategy,
@@ -97,10 +96,9 @@ async fn debug_main() {
         Arc::new(UpdateOrderbookStrategy::new()),
         Arc::new(UpdateOrderStrategy::new()),
         Arc::new(UpdatePositionStrategy::new()),
-        Arc::new(PeterStrategy::new()),
+        Arc::new(TobStrategy::new()),
         // Arc::new(OrderLoggingStrategy::new()),
         Arc::new(PositionLoggingStrategy::new()),
-
         // Arc::new(UpdateCryptoOrderbookStrategy::new()),
         // Arc::new(BBOLoggingStrategy::new()),
         // Arc::new(MainLoggingStrategy::new()),

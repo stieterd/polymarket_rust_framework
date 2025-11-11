@@ -7,17 +7,22 @@ use std::{
 use crate::{
     exchange_listeners::{
         crypto_models::{
-            CryptoPrice, CryptoPriceUpdate, get_crypto_orderbook_map, get_crypto_prices_map
+            get_crypto_orderbook_map, get_crypto_prices_map, CryptoPrice, CryptoPriceUpdate,
         },
-        orderbooks::{CryptoOrderbook, OrderbookDepth, OrderbookLevel, poly_orderbook::OrderBook},
+        orderbooks::{poly_orderbook::OrderBook, CryptoOrderbook, OrderbookDepth, OrderbookLevel},
         poly_models::{LegacyPriceChange, Listener, OrderSide, PriceChange},
     },
     strategies::{
-        Strategy, StrategyContext, custom::peter::models::{MAX_VOLUME, OrderBookContext, TARGET_ORDER_SIZE}, strategy_utils::{StrategyAsset, StrategyClient, StrategyOpenOrder, StrategyOrderBook, StrategyPosition, parse_millis}
+        custom::tob::models::{OrderBookContext, MAX_VOLUME, TARGET_ORDER_SIZE},
+        strategy_utils::{
+            parse_millis, StrategyAsset, StrategyClient, StrategyOpenOrder, StrategyOrderBook,
+            StrategyPosition,
+        },
+        Strategy, StrategyContext,
     },
 };
 
-pub struct PeterStrategy {
+pub struct TobStrategy {
     orderbook_context_queue: Mutex<std::collections::VecDeque<OrderBookContext>>,
 }
 
@@ -27,8 +32,7 @@ struct PlannedOrder {
     tick_size: String,
 }
 
-impl PeterStrategy {
-
+impl TobStrategy {
     pub fn new() -> Self {
         Self {
             orderbook_context_queue: Mutex::new(VecDeque::with_capacity(1000)), // 1000 is the max size of the queue
@@ -55,9 +59,8 @@ impl PeterStrategy {
         asset_id: &str,
         orderbook: &OrderBook,
     ) -> Option<PlannedOrder> {
-        
         let (bid_price, bid_size) = orderbook.best_bid()?;
-       
+
         if bid_size <= MAX_VOLUME {
             return None;
         }
@@ -73,7 +76,6 @@ impl PeterStrategy {
             .copied()
             .unwrap_or(0);
 
-
         if current_position.saturating_sub(other_position) >= TARGET_ORDER_SIZE {
             return None;
         }
@@ -84,13 +86,18 @@ impl PeterStrategy {
             }
         }
 
-        let exists = StrategyOpenOrder::order_exists(ctx, asset_id, OrderSide::Buy, bid_price, TARGET_ORDER_SIZE);
+        let exists = StrategyOpenOrder::order_exists(
+            ctx,
+            asset_id,
+            OrderSide::Buy,
+            bid_price,
+            TARGET_ORDER_SIZE,
+        );
 
         if exists {
             return None;
         }
 
-        
         // info!("{:?} - {:?}: {:?}", current_position, other_position, bid_price);
 
         Some(PlannedOrder {
@@ -101,14 +108,13 @@ impl PeterStrategy {
     }
 
     fn execute_order_plan(&self, ctx: Arc<StrategyContext>, asset_id: &str, plan: PlannedOrder) {
-
         let negrisk = StrategyAsset::is_negrisk(&ctx.clone(), asset_id);
         let asset_id_owned = asset_id.to_string();
         let tick_size_owned = plan.tick_size.clone();
 
         let market_assets = StrategyAsset::get_yes_and_no(&ctx.clone(), asset_id);
         let positions = StrategyPosition::assets_position_map(&ctx, &market_assets);
-        
+
         let current_position = *positions.get(asset_id).unwrap_or(&0);
         let other_asset = market_assets.iter().find(|&&ref id| id != asset_id);
 
@@ -117,9 +123,9 @@ impl PeterStrategy {
             .copied()
             .unwrap_or(0);
 
-
         let orders_to_cancel = StrategyOpenOrder::collect_orders_asset(ctx.as_ref(), asset_id);
-        if let Err(err) = StrategyClient::cancel_orders(Arc::clone(&ctx), asset_id, orders_to_cancel)
+        if let Err(err) =
+            StrategyClient::cancel_orders(Arc::clone(&ctx), asset_id, orders_to_cancel)
         {
             error!(
                 "[{}] Failed to cancel existing orders for {}: {}",
@@ -141,16 +147,19 @@ impl PeterStrategy {
         ) {
             error!(
                 "[{}] Failed to initiate limit order for {} at {}x{}: {}",
-                self.name(), asset_id_owned, plan.price, plan.size, err
+                self.name(),
+                asset_id_owned,
+                plan.price,
+                plan.size,
+                err
             );
         }
     }
-
 }
 
-impl Strategy for PeterStrategy {
+impl Strategy for TobStrategy {
     fn name(&self) -> &'static str {
-        "PeterStrategy"
+        "TobStrategy"
     }
 
     fn poly_handle_market_price_change(
@@ -163,7 +172,11 @@ impl Strategy for PeterStrategy {
 
         let market = StrategyAsset::get_market(&ctx, asset_id);
         let slug = market.slug.clone().unwrap();
-        if !slug.eq_ignore_ascii_case("will-zohran-mamdani-win-the-2025-nyc-mayoral-election") {
+        let volume_f64 = market.liquidityClob.clone().unwrap();
+
+        let volume_u32 = (volume_f64 * 1000.0) as u32;
+
+        if volume_u32 < 1000_000{
             return;
         }
 
@@ -172,7 +185,10 @@ impl Strategy for PeterStrategy {
             Err(err) => {
                 error!(
                     "[{}] Failed to parse price '{}' for {}: {}",
-                    self.name(), _payload.price, asset_id, err
+                    self.name(),
+                    _payload.price,
+                    asset_id,
+                    err
                 );
                 return;
             }
@@ -183,7 +199,10 @@ impl Strategy for PeterStrategy {
             Err(err) => {
                 error!(
                     "[{}] Failed to parse size '{}' for {}: {}",
-                    self.name(), _payload.size, asset_id, err
+                    self.name(),
+                    _payload.size,
+                    asset_id,
+                    err
                 );
                 return;
             }

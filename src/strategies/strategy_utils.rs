@@ -1,8 +1,16 @@
-use std::{collections::HashMap, sync::Arc};
 use ethers::abi::Hash;
 use log::error;
+use std::{collections::HashMap, sync::Arc};
 
-use crate::{exchange_listeners::{orderbooks::poly_orderbook::OrderBook, poly_client::PolyClient, poly_models::{AssetSide, OrderSide}}, marketmaking::poly_market_struct::Market, strategies::{Strategy, StrategyContext}};
+use crate::{
+    exchange_listeners::{
+        orderbooks::poly_orderbook::OrderBook,
+        poly_client::PolyClient,
+        poly_models::{AssetSide, OrderSide},
+    },
+    marketmaking::poly_market_struct::Market,
+    strategies::{Strategy, StrategyContext},
+};
 
 pub struct StrategyOrderBook;
 pub struct StrategyOpenOrder;
@@ -17,9 +25,7 @@ pub fn parse_millis(numeric: &str) -> Result<u32, String> {
         .map_err(|err| format!("Failed to parse '{}' as f64: {}", numeric, err))
 }
 
-
-impl StrategyOrderBook{
-
+impl StrategyOrderBook {
     pub fn price_matches_top_of_book(orderbook: &OrderBook, price: u32) -> bool {
         let bid_matches = orderbook
             .best_bid()
@@ -34,21 +40,21 @@ impl StrategyOrderBook{
     }
 }
 
-impl StrategyOpenOrder{
-    pub fn order_exists(ctx: &StrategyContext, asset_id: &str, side: OrderSide, price: u32, size: u32) -> bool {
+impl StrategyOpenOrder {
+    pub fn order_exists(
+        ctx: &StrategyContext,
+        asset_id: &str,
+        side: OrderSide,
+        price: u32,
+        size: u32,
+    ) -> bool {
         let order_exists = ctx
-                .poly_state
-                .open_orders
-                .get(asset_id)
-                .map(|orders| {
-                    orders.order_exists(
-                        side,
-                        price,
-                        size,
-                    )
-                })
-                .unwrap_or(false);
-        
+            .poly_state
+            .open_orders
+            .get(asset_id)
+            .map(|orders| orders.order_exists(side, price, size))
+            .unwrap_or(false);
+
         order_exists
     }
 
@@ -74,11 +80,9 @@ impl StrategyOpenOrder{
             })
             .unwrap_or_default()
     }
-    
 }
 
-impl StrategyAsset{
-    
+impl StrategyAsset {
     pub fn is_negrisk(ctx: &StrategyContext, asset_id: &str) -> bool {
         ctx.poly_state
             .markets
@@ -96,12 +100,14 @@ impl StrategyAsset{
     }
 
     pub fn get_market(ctx: &StrategyContext, asset_id: &str) -> Arc<Market> {
-        ctx.poly_state
-            .markets
-            .get(asset_id).unwrap().clone()
+        ctx.poly_state.markets.get(asset_id).unwrap().clone()
     }
 
-    pub fn get_other_side(_ctx: &StrategyContext, asset_id: &str, assets_in_market: &Vec<String>) -> String {
+    pub fn get_other_side(
+        _ctx: &StrategyContext,
+        asset_id: &str,
+        assets_in_market: &Vec<String>,
+    ) -> String {
         assets_in_market
             .iter()
             .find(|&id| id != asset_id)
@@ -181,17 +187,14 @@ impl StrategyPosition {
             })
             .collect()
     }
-
 }
 
 impl StrategyClient {
-    
     pub fn cancel_orders(
         ctx: Arc<StrategyContext>,
         asset_id: &str,
         orders_to_cancel: Vec<(OrderSide, u32, u32)>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        
         if orders_to_cancel.is_empty() {
             return Ok(());
         }

@@ -3,7 +3,10 @@ use std::sync::Arc;
 
 use crate::{
     exchange_listeners::{
-        Crypto, Exchange, Instrument, crypto_models::CryptoPriceUpdate, orderbooks::{CryptoOrderbook, OrderbookDepth, poly_orderbook::OrderBook}, poly_models::{LegacyPriceChange, Listener, PriceChange, TradeStatus}
+        crypto_models::CryptoPriceUpdate,
+        orderbooks::{poly_orderbook::OrderBook, CryptoOrderbook, OrderbookDepth},
+        poly_models::{LegacyPriceChange, Listener, PriceChange, TradeStatus},
+        Crypto, Exchange, Instrument,
     },
     strategies::{Strategy, StrategyContext},
 };

@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::{Arc, RwLock}};
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 
 use crate::{
     credentials::ADDRESS_STR,
@@ -6,7 +9,7 @@ use crate::{
         orderbooks::poly_orderbook::OrderBook,
         poly_models::{Listener, OrderSide, Position, TradeRole, TradeStatus},
     },
-    strategies::{Strategy, StrategyContext, strategy_utils::parse_millis},
+    strategies::{strategy_utils::parse_millis, Strategy, StrategyContext},
 };
 use dashmap::mapref::entry::Entry;
 use log::warn;
@@ -79,7 +82,6 @@ impl Strategy for UpdatePositionStrategy {
         _listener: Listener,
         _payload: &crate::exchange_listeners::poly_models::TradePayload,
     ) {
-        
         if _payload.status != TradeStatus::Matched {
             return;
         }
@@ -115,15 +117,19 @@ impl Strategy for UpdatePositionStrategy {
                     }
                 };
 
-                Self::apply_position_delta(ctx.as_ref(), &_listener, &asset_id, side, size_u32, None);
+                Self::apply_position_delta(
+                    ctx.as_ref(),
+                    &_listener,
+                    &asset_id,
+                    side,
+                    size_u32,
+                    None,
+                );
             }
             TradeRole::Maker => {
                 let mut per_asset: HashMap<String, (u32, u32)> = HashMap::new();
                 for maker_order in &_payload.maker_orders {
-                    if !maker_order
-                        .maker_address
-                        .eq_ignore_ascii_case(ADDRESS_STR)
-                    {
+                    if !maker_order.maker_address.eq_ignore_ascii_case(ADDRESS_STR) {
                         continue;
                     }
 
