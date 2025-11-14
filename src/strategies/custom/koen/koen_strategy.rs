@@ -28,14 +28,14 @@ pub struct KoenStrategy {
 impl KoenStrategy {
     pub fn new() -> Self {
         Self {
-            max_spread: 0.01,
-            price_lower_bound: 0.05,
-            price_upper_bound: 0.95,
-            predicted_move: 0.06,
+            max_spread: 0.02,
+            price_lower_bound: 0.02,
+            price_upper_bound: 0.98,
+            predicted_move: 0.065,
             max_order_size: 25.0,
             max_counterparty_size: 100.0,
             min_same_side_liquidity: 150.0,
-            trade_cooldown: Duration::from_secs(5 * 60),
+            trade_cooldown: Duration::from_secs(1 * 60),
             cancel_after: Duration::from_secs(1),
             last_trade: DashMap::new(),
         }
