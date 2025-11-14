@@ -172,13 +172,21 @@ impl Strategy for TobStrategy {
 
         let market = StrategyAsset::get_market(&ctx, asset_id);
         let slug = market.slug.clone().unwrap();
-        let volume_f64 = market.liquidityClob.clone().unwrap();
+        // let volume_f64 = market.volume24hr.clone().unwrap();
 
-        let volume_u32 = (volume_f64 * 1000.0) as u32;
-
-        if volume_u32 < 1000_000{
+        if !(slug.eq_ignore_ascii_case("will-the-government-shutdown-end-november-13-182")
+            | slug.eq_ignore_ascii_case("will-the-government-shutdown-end-november-14-412")
+            | slug.eq_ignore_ascii_case("will-the-government-shutdown-end-november-15-216")
+            | slug.eq_ignore_ascii_case("will-the-government-shutdown-end-november-16-928"))
+        {
             return;
         }
+
+        // let volume_u32 = (volume_f64 * 1000.0) as u32;
+
+        // if volume_u32 < 1000_000{
+        //     return;
+        // }
 
         let price_u32 = match parse_millis(&_payload.price) {
             Ok(price) => price,
@@ -210,9 +218,9 @@ impl Strategy for TobStrategy {
 
         if let Some(orderbook_entry) = ctx.poly_state.orderbooks.get(asset_id) {
             if let Ok(orderbook) = orderbook_entry.read() {
-                if !StrategyOrderBook::price_matches_top_of_book(&orderbook, price_u32) {
-                    return;
-                }
+                // if !StrategyOrderBook::price_matches_top_of_book(&orderbook, price_u32) {
+                //     return;
+                // }
 
                 // The price dropped
                 if size_u32 == 0 {

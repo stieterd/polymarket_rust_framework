@@ -12,6 +12,15 @@ const SEARCH_DEPTH: u32 = 100; // Corresponds to 10 cents
 
 // --- Heap Conversion and Best Price Logic (Ported from old implementation) ---
 
+#[derive(Debug, Clone)]
+pub struct OrderBookSnapshot {
+    pub asset_id: String,
+    pub timestamp: String,
+    pub tick_size: String,
+    pub bids: Vec<(u32, u32)>,
+    pub asks: Vec<(u32, u32)>,
+}
+
 fn convert_to_bid_heap(bids: &DashMap<u32, u32>) -> BinaryHeap<(u32, u32)> {
     bids.iter()
         .map(|entry| (*entry.key(), *entry.value()))
@@ -41,6 +50,24 @@ pub struct OrderBook {
 }
 
 impl OrderBook {
+    pub fn snapshot(&self) -> OrderBookSnapshot {
+        OrderBookSnapshot {
+            asset_id: self.asset_id.clone(),
+            timestamp: self.timestamp.clone(),
+            tick_size: self.tick_size.clone(),
+            bids: self
+                .bids
+                .iter()
+                .map(|entry| (*entry.key(), *entry.value()))
+                .collect(),
+            asks: self
+                .asks
+                .iter()
+                .map(|entry| (*entry.key(), *entry.value()))
+                .collect(),
+        }
+    }
+
     pub fn new(snapshot: &AggOrderbook, tick_size: String) -> Self {
         let bids = DashMap::new();
         for entry in &snapshot.bids {

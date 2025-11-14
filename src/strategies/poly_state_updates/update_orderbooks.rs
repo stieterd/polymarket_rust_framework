@@ -37,6 +37,17 @@ impl Strategy for UpdateOrderbookStrategy {
             .unwrap();
         let tick_size_str = tick_size.to_string();
         let orderbook = OrderBook::new(_snapshot, tick_size_str);
+
+        if let Some(existing) = ctx.poly_state.orderbooks.get(&asset_id) {
+            if let Ok(book) = existing.read() {
+                ctx.poly_state
+                    .prev_orderbooks
+                    .insert(asset_id.clone(), book.snapshot());
+            }
+        } else {
+            ctx.poly_state.prev_orderbooks.remove(&asset_id);
+        }
+
         ctx.poly_state
             .orderbooks
             .insert(asset_id, Arc::new(RwLock::new(orderbook)));
@@ -49,7 +60,11 @@ impl Strategy for UpdateOrderbookStrategy {
         _payload: &PriceChange,
     ) {
         if let Some(orderbook_entry) = ctx.poly_state.orderbooks.get(&_payload.asset_id) {
-            if let Ok(book) = orderbook_entry.write() {
+            if let Ok(mut book) = orderbook_entry.write() {
+                ctx.poly_state
+                    .prev_orderbooks
+                    .insert(_payload.asset_id.clone(), book.snapshot());
+
                 // Pass an epoch timestamp string as the second argument.
                 // For now, use chrono to get the current epoch as a string.
                 let now_epoch = chrono::Utc::now().timestamp().to_string();
@@ -66,6 +81,9 @@ impl Strategy for UpdateOrderbookStrategy {
     ) {
         if let Some(orderbook_entry) = ctx.poly_state.orderbooks.get(&_payload.asset_id) {
             if let Ok(mut book) = orderbook_entry.write() {
+                ctx.poly_state
+                    .prev_orderbooks
+                    .insert(_payload.asset_id.clone(), book.snapshot());
                 book.set_tick_size(_payload.new_tick_size.clone());
             }
         }
