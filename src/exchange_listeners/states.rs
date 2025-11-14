@@ -7,7 +7,10 @@ use std::{
 use crate::{
     exchange_listeners::{
         crypto_models::CryptoPrice,
-        orderbooks::{poly_orderbook::OrderBook, CryptoOrderbook, OrderbookDepth},
+        orderbooks::{
+            poly_orderbook::{OrderBook, OrderBookSnapshot},
+            CryptoOrderbook, OrderbookDepth,
+        },
         poly_client::PolyClient,
         poly_models::{AssetOrders, OpenOrder, Position, RateLimit},
         Exchange, Instrument,
@@ -19,6 +22,7 @@ use crate::{
 #[derive(Debug, Default)]
 pub struct PolyMarketState {
     pub orderbooks: Arc<DashMap<String, Arc<RwLock<OrderBook>>>>,
+    pub prev_orderbooks: Arc<DashMap<String, OrderBookSnapshot>>,
     pub positions: Arc<DashMap<String, Arc<RwLock<Position>>>>,
     pub open_orders: Arc<DashMap<String, AssetOrders>>,
     pub markets: Arc<HashMap<String, Arc<Market>>>,
