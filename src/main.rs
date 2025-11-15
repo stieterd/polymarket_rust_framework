@@ -96,7 +96,7 @@ async fn debug_main() {
         Arc::new(UpdateOrderbookStrategy::new()),
         Arc::new(UpdateOrderStrategy::new()),
         Arc::new(UpdatePositionStrategy::new()),
-        Arc::new(TobStrategy::new()),
+        Arc::new(KoenStrategy::new()),
         // Arc::new(OrderLoggingStrategy::new()),
         Arc::new(PositionLoggingStrategy::new()),
         // Arc::new(UpdateCryptoOrderbookStrategy::new()),
