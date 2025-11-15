@@ -1,5 +1,8 @@
+use dashmap::DashMap;
 use log::{error, info};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::time::sleep;
 
 use crate::{
     exchange_listeners::poly_models::{Listener, OrderSide, PriceChange},
@@ -13,25 +16,43 @@ pub struct KoenStrategy {
     max_spread: f64,
     price_lower_bound: f64,
     price_upper_bound: f64,
-    hedging_cost: f64,
-    // Linear model weights (dummy parameters for now)
-    model_coef_gap: f64,
-    model_coef_f: f64,
-    model_coef_swmid_final: f64,
+    predicted_move: f64,
+    max_order_size: f64,
+    max_counterparty_size: f64,
+    min_same_side_liquidity: f64,
+    trade_cooldown: Duration,
+    cancel_after: Duration,
+    last_trade: DashMap<String, Instant>,
 }
 
 impl KoenStrategy {
     pub fn new() -> Self {
         Self {
-            max_spread: 0.10,        // Maximum spread (10%)
-            price_lower_bound: 0.05, // Lower price bound (0.01)
-            price_upper_bound: 0.95, // Upper price bound (0.99)
-            hedging_cost: 0.001,     // Hedging cost (0.5%)
-            // Dummy linear model coefficients
-            model_coef_gap: 0.1,
-            model_coef_f: 0.2,
-            model_coef_swmid_final: 0.15,
+            max_spread: 0.02,
+            price_lower_bound: 0.02,
+            price_upper_bound: 0.98,
+            predicted_move: 0.065,
+            max_order_size: 25.0,
+            max_counterparty_size: 100.0,
+            min_same_side_liquidity: 150.0,
+            trade_cooldown: Duration::from_secs(1 * 60),
+            cancel_after: Duration::from_secs(1),
+            last_trade: DashMap::new(),
         }
+    }
+
+    fn calc_gap(b1_price: f64, b2_price: f64, a1_price: f64, a2_price: f64) -> f64 {
+        let bid_gap = b1_price - b2_price;
+        let ask_gap = a2_price - a1_price;
+        ask_gap - bid_gap
+    }
+
+    fn price_to_int(price: f64) -> u32 {
+        (price * 1000.0).round() as u32
+    }
+
+    fn size_to_int(size: f64) -> u32 {
+        (size * 1000.0).round() as u32
     }
 }
 
@@ -50,184 +71,177 @@ impl Strategy for KoenStrategy {
 
         if let Some(orderbook_entry) = ctx.poly_state.orderbooks.get(asset_id) {
             if let Ok(orderbook) = orderbook_entry.read() {
-                // Parse the incoming price
+                if let Some(entry) = self.last_trade.get(asset_id) {
+                    if entry.elapsed() < self.trade_cooldown {
+                        return;
+                    }
+                }
                 let price_u32 = match parse_millis(&_payload.price) {
                     Ok(price) => price,
                     Err(err) => {
                         error!(
                             "[{}] Failed to parse price '{}' for {}: {}",
-                            self.name(),
-                            _payload.price,
-                            asset_id,
-                            err
+                            self.name(), _payload.price, asset_id, err
                         );
                         return;
                     }
                 };
 
-                // Only process if this price change affects top of book
                 let (best_bid_price, best_ask_price) =
                     match (orderbook.best_bid(), orderbook.best_ask()) {
                         (Some((bid_p, _)), Some((ask_p, _))) => (bid_p, ask_p),
-                        _ => return, // No valid top of book
+                        _ => return,
                     };
 
                 if price_u32 != best_bid_price && price_u32 != best_ask_price {
                     return;
                 }
 
-                // Calculate and check mid_price early to avoid unnecessary work
                 let bid_price_f = best_bid_price as f64 / 1000.0;
                 let ask_price_f = best_ask_price as f64 / 1000.0;
                 let mid_price = (bid_price_f + ask_price_f) / 2.0;
 
-                // Check price is within bounds
                 if mid_price < self.price_lower_bound || mid_price > self.price_upper_bound {
                     return;
                 }
 
-                // Extract top 2 bids and asks
-                let b1 = orderbook.best_bid(); // Best bid (b1_price, b1_volume)
-                let a1 = orderbook.best_ask(); // Best ask (a1_price, a1_volume)
+                let b1 = orderbook.best_bid();
+                let a1 = orderbook.best_ask();
 
-                if let (Some(b1), Some(a1)) = (b1, a1) {
-                    let (b1_price, b1v) = b1;
-                    let (a1_price, a1v) = a1;
-
-                    // Extract second best bid and ask by sorting the maps
+                if let (Some((b1_price, b1_size)), Some((a1_price, a1_size))) = (b1, a1) {
                     let mut bids_sorted: Vec<(u32, u32)> = orderbook
                         .get_bid_map()
                         .iter()
                         .map(|entry| (*entry.key(), *entry.value()))
                         .collect();
-                    bids_sorted.sort_by(|a, b| b.cmp(a)); // Sort descending (best first)
+                    bids_sorted.sort_by(|a, b| b.cmp(a));
 
                     let mut asks_sorted: Vec<(u32, u32)> = orderbook
                         .get_ask_map()
                         .iter()
                         .map(|entry| (*entry.key(), *entry.value()))
                         .collect();
-                    asks_sorted.sort(); // Sort ascending (best first)
+                    asks_sorted.sort();
 
-                    // Check that second best bids and asks exist
-                    let (b2_price, b2v) = match bids_sorted.get(1) {
+                    let (b2_price, b2_size) = match bids_sorted.get(1) {
                         Some(entry) => *entry,
-                        None => return, // No second best bid
+                        None => return,
                     };
-                    let (a2_price, a2v) = match asks_sorted.get(1) {
+                    let (a2_price, a2_size) = match asks_sorted.get(1) {
                         Some(entry) => *entry,
-                        None => return, // No second best ask
+                        None => return,
                     };
 
-                    // Convert to f64 (divide by 1000 to get back to decimal)
                     let b1_price_f = b1_price as f64 / 1000.0;
-                    let b1v_f = b1v as f64 / 1000.0;
-                    let a1_price_f = a1_price as f64 / 1000.0;
-                    let a1v_f = a1v as f64 / 1000.0;
                     let b2_price_f = b2_price as f64 / 1000.0;
-                    let b2v_f = b2v as f64 / 1000.0;
+                    let a1_price_f = a1_price as f64 / 1000.0;
                     let a2_price_f = a2_price as f64 / 1000.0;
-                    let a2v_f = a2v as f64 / 1000.0;
+                    let b1_size_f = b1_size as f64 / 1000.0;
+                    let b2_size_f = b2_size as f64 / 1000.0;
+                    let a1_size_f = a1_size as f64 / 1000.0;
+                    let a2_size_f = a2_size as f64 / 1000.0;
 
-                    // Calculate spread
+                    if a1_size_f >= self.max_counterparty_size {
+                        return;
+                    }
+
+                    if b1_size_f <= a1_size_f {
+                        return;
+                    }
+
+                    if b1_size_f < self.min_same_side_liquidity {
+                        return;
+                    }
+
                     let spread = a1_price_f - b1_price_f;
-
-                    // Check spread is within limit
                     if spread > self.max_spread {
                         return;
                     }
 
-                    // Calculate intermediate variables
-                    let ratio = ((1.0 + b1v_f) / (1.0 + a1v_f)).ln();
-                    let swmid = (b1_price_f * a1v_f + a1_price_f * b1v_f) / (a1v_f + b1v_f);
-                    let swmid_diff = swmid - mid_price;
-                    let swmid_f1 = swmid_diff / spread;
-                    let swmid_final = (1.0 / 3.0) * (swmid_diff + swmid_f1 + ratio);
+                    let gap = Self::calc_gap(b1_price_f, b2_price_f, a1_price_f, a2_price_f);
+                    if gap == 0.0 {
+                        return;
+                    }
+                    let predicted_delta = gap * self.predicted_move;
 
-                    // Calculate f1 and f2
-                    let f1 = (b2v_f / (b1v_f + a1v_f)).asinh();
-                    let f2 = (a2v_f / (b1v_f + a1v_f)).asinh();
-
-                    // Calculate f
-                    let f = f1 - f2;
-
-                    // Calculate gaps
-                    let gap_1 = a2_price_f - a1_price_f;
-                    let gap_2 = b1_price_f - b2_price_f;
-                    let gap = (gap_1 - gap_2).clamp(-0.1, 0.1);
-
-                    // Log the extracted features
-                    info!(
-                        "[{}] {} - B1: {:.3}x{:.3}, B2: {:.3}x{:.3}, A1: {:.3}x{:.3}, A2: {:.3}x{:.3}, f: {:.6}, gap: {:.6}, swmid_final: {:.6}",
-                        self.name(), asset_id,
-                        b1_price_f, b1v_f, b2_price_f, b2v_f,
-                        a1_price_f, a1v_f, a2_price_f, a2v_f,
-                        f, gap, swmid_final
-                    );
-
-                    // Run linear regression model to predict return
-                    let predicted_delta = self.model_coef_gap * gap
-                        + self.model_coef_f * f
-                        + self.model_coef_swmid_final * swmid_final;
-
-                    // Calculate predicted price
                     let predicted_price = mid_price + predicted_delta;
+                    let tick_size = orderbook.get_tick_size();
+                    let negrisk = StrategyAsset::is_negrisk(&ctx, asset_id);
 
-                    // Check buy signal: predicted price > ask + hedging_cost
-                    if predicted_price > a1_price_f + self.hedging_cost {
-                        let size = 100.0; // 100 shares in decimal
-                        let price = a1_price_f;
-                        let negrisk = StrategyAsset::is_negrisk(&ctx, asset_id);
-                        let tick_size = orderbook.get_tick_size();
-
-                        info!(
-                            "[{}] BUY signal - Predicted: {:.6}, Ask: {:.6}, Delta: {:.6}",
-                            self.name(),
-                            predicted_price,
-                            a1_price_f,
-                            predicted_delta
-                        );
+                    if predicted_delta > 0.0 && predicted_price >= a1_price_f {
+                        let price_int = Self::price_to_int(a1_price_f);
+                        let available_size = a1_size as f64 / 1000.0;
+                        let trade_size = available_size.min(self.max_order_size);
+                        if trade_size <= 0.0 {
+                            return;
+                        }
+                        let size_int = Self::size_to_int(trade_size);
 
                         if let Err(err) = StrategyClient::place_limit_order(
                             Arc::clone(&ctx),
                             asset_id,
                             OrderSide::Buy,
-                            (price * 1000.0_f64).round() as u32,
-                            (size * 1000.0_f64).round() as u32,
+                            price_int,
+                            size_int,
                             tick_size,
                             negrisk,
                         ) {
                             error!("[{}] Failed to place BUY order: {}", self.name(), err);
+                        } else {
+                            let ctx_for_cancel = Arc::clone(&ctx);
+                            let asset_for_cancel = asset_id.to_string();
+                            let cancel_delay = self.cancel_after;
+                            info!(
+                                "[{}] BUY executed asset={} gap={:.4} mid={:.3} predicted={:.3} size={:.3} | bids: {:.3}@{:.3}, {:.3}@{:.3} | asks: {:.3}@{:.3}, {:.3}@{:.3}",
+                                self.name(),
+                                asset_id,
+                                gap,
+                                mid_price,
+                                predicted_price,
+                                trade_size,
+                                b1_price_f,
+                                b1_size_f,
+                                b2_price_f,
+                                b2_size_f,
+                                a1_price_f,
+                                a1_size_f,
+                                a2_price_f,
+                                a2_size_f
+                            );
+                            self.last_trade.insert(asset_id.to_string(), Instant::now());
+                            tokio::spawn(async move {
+                                sleep(cancel_delay).await;
+                                let still_open = ctx_for_cancel
+                                    .poly_state
+                                    .open_orders
+                                    .get(&asset_for_cancel)
+                                    .map(|orders| {
+                                        orders.order_exists(OrderSide::Buy, price_int, size_int)
+                                    })
+                                    .unwrap_or(false);
+                                if still_open {
+                                    if let Err(err) = StrategyClient::cancel_orders(
+                                        Arc::clone(&ctx_for_cancel),
+                                        &asset_for_cancel,
+                                        vec![(OrderSide::Buy, price_int, size_int)],
+                                    ) {
+                                        error!(
+                                            "[{}] Failed to cancel stale BUY order for asset {}: {}",
+                                            "KoenStrategy", asset_for_cancel, err
+                                        );
+                                    } else {
+                                        info!(
+                                            "[KoenStrategy] Canceled unfilled BUY order asset={} price={:.3} size={:.3}",
+                                            asset_for_cancel,
+                                            price_int as f64 / 1000.0,
+                                            size_int as f64 / 1000.0
+                                        );
+                                    }
+                                }
+                            });
                         }
                     }
 
-                    // Check sell signal: predicted price < bid - hedging_cost
-                    if predicted_price < b1_price_f - self.hedging_cost {
-                        let size = 100.0; // 100 shares in decimal
-                        let price = b1_price_f;
-                        let negrisk = StrategyAsset::is_negrisk(&ctx, asset_id);
-                        let tick_size = orderbook.get_tick_size();
-
-                        info!(
-                            "[{}] SELL signal - Predicted: {:.6}, Bid: {:.6}, Delta: {:.6}",
-                            self.name(),
-                            predicted_price,
-                            b1_price_f,
-                            predicted_delta
-                        );
-
-                        if let Err(err) = StrategyClient::place_limit_order(
-                            Arc::clone(&ctx),
-                            asset_id,
-                            OrderSide::Sell,
-                            (price * 1000.0_f64).round() as u32,
-                            (size * 1000.0_f64).round() as u32,
-                            tick_size,
-                            negrisk,
-                        ) {
-                            error!("[{}] Failed to place SELL order: {}", self.name(), err);
-                        }
-                    }
                 }
             }
         }
