@@ -37,13 +37,11 @@ use clob_client::constants::{FRAC_CENTS, FULL_CENTS};
 
 use dashmap::DashMap;
 use marketmaking::{
-    maker_taker_config::REFRESH_TIME,
     marketmakingclient::CLIENT,
     poly_get_markets::fetch_neg_risk_markets,
     poly_market_struct::{
         build_asset_id_to_event_map, build_asset_id_to_market_map, Event, EventJson, Market,
     },
-    utils::MarketMakingCalculated,
 };
 
 mod exchange_listeners;
