@@ -81,7 +81,10 @@ impl Strategy for KoenStrategy {
                     Err(err) => {
                         error!(
                             "[{}] Failed to parse price '{}' for {}: {}",
-                            self.name(), _payload.price, asset_id, err
+                            self.name(),
+                            _payload.price,
+                            asset_id,
+                            err
                         );
                         return;
                     }
@@ -240,7 +243,6 @@ impl Strategy for KoenStrategy {
                             });
                         }
                     }
-
                 }
             }
         }
