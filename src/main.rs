@@ -48,13 +48,13 @@ use exchange_listeners::{event_processor, AppState, PolyMarketState};
 use tokio::runtime;
 
 use crate::{
-    credentials::ADDRESS_STR, exchange_listeners::{autodiscover_markets::autodiscover_market_config, poly_models::{get_positions, Position}}, marketmaking::poly_market_struct::events_json_to_events_with_market_map, strategies::{
+    credentials::ADDRESS_STR, exchange_listeners::{autodiscover_markets::autodiscover_market_config, poly_models::{Position, get_positions}}, marketmaking::poly_market_struct::events_json_to_events_with_market_map, strategies::{
         app_state_updates::update_crypto_orderbooks::UpdateCryptoOrderbookStrategy,
         custom::{koen::koen_strategy::KoenStrategy, tob::tob_strategy::TobStrategy},
         logging::{
             bbo_logging::BBOLoggingStrategy, crypto_logging::CryptoLoggingStrategy,
             main_logging::MainLoggingStrategy, order_logging::OrderLoggingStrategy,
-            position_logging::PositionLoggingStrategy,
+            position_logging::PositionLoggingStrategy, trade_logging::TradeLoggingStrategy,
         },
     }
 };
@@ -118,6 +118,7 @@ async fn debug_main() {
         Arc::new(PositionLoggingStrategy::new()),
         // Arc::new(UpdateCryptoOrderbookStrategy::new()),
         // Arc::new(BBOLoggingStrategy::new()),
+        // Arc::new(TradeLoggingStrategy::new()),
         // Arc::new(MainLoggingStrategy::new()),
         // Arc::new(CryptoLoggingStrategy),
     ];
