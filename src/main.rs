@@ -113,12 +113,12 @@ async fn debug_main() {
         Arc::new(UpdateOrderbookStrategy::new()),
         Arc::new(UpdateOrderStrategy::new()),
         Arc::new(UpdatePositionStrategy::new()),
-        // Arc::new(KoenStrategy::new()),
+        Arc::new(KoenStrategy::new()),
         // Arc::new(OrderLoggingStrategy::new()),
         Arc::new(PositionLoggingStrategy::new()),
         // Arc::new(UpdateCryptoOrderbookStrategy::new()),
-        // Arc::new(BBOLoggingStrategy::new()),
-        // Arc::new(TradeLoggingStrategy::new()),
+        Arc::new(BBOLoggingStrategy::new()),
+        Arc::new(TradeLoggingStrategy::new()),
         // Arc::new(MainLoggingStrategy::new()),
         // Arc::new(CryptoLoggingStrategy),
     ];
@@ -185,7 +185,7 @@ async fn debug_main() {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_millis();
-            // println!("Pending events: {} - {}", counting_sender.pending(), now);
+            println!("Pending events: {} - {}", counting_sender.pending(), now);
         }
     }
 }
