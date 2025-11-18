@@ -51,9 +51,7 @@ use exchange_listeners::{event_processor, AppState, PolyMarketState};
 use tokio::runtime;
 
 use crate::{
-    exchange_listeners::autodiscover_markets::autodiscover_market_config,
-    marketmaking::poly_market_struct::events_json_to_events_with_market_map,
-    strategies::{
+    credentials::ADDRESS_STR, exchange_listeners::{autodiscover_markets::autodiscover_market_config, poly_models::get_positions}, marketmaking::poly_market_struct::events_json_to_events_with_market_map, strategies::{
         app_state_updates::update_crypto_orderbooks::UpdateCryptoOrderbookStrategy,
         custom::{koen::koen_strategy::KoenStrategy, tob::tob_strategy::TobStrategy},
         logging::{
@@ -61,7 +59,7 @@ use crate::{
             main_logging::MainLoggingStrategy, order_logging::OrderLoggingStrategy,
             position_logging::PositionLoggingStrategy,
         },
-    },
+    }
 };
 
 fn main() {
@@ -89,6 +87,7 @@ async fn debug_main() {
     let market_asset_ids = Arc::new(market_asset_ids);
     let polymarket_state = Arc::new(PolyMarketState {
         markets: Arc::clone(&market_map),
+        positions: Arc::new(get_positions(ADDRESS_STR).await),
         ..Default::default()
     }); // Orderbooks
     info!("Starting strategies");
@@ -96,7 +95,7 @@ async fn debug_main() {
         Arc::new(UpdateOrderbookStrategy::new()),
         Arc::new(UpdateOrderStrategy::new()),
         Arc::new(UpdatePositionStrategy::new()),
-        Arc::new(KoenStrategy::new()),
+        // Arc::new(KoenStrategy::new()),
         // Arc::new(OrderLoggingStrategy::new()),
         Arc::new(PositionLoggingStrategy::new()),
         // Arc::new(UpdateCryptoOrderbookStrategy::new()),

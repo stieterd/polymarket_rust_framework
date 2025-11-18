@@ -4,7 +4,6 @@ use super::orderbooks::poly_orderbook::OrderBook;
 use dashmap::DashMap;
 use serde::Deserialize;
 use std::{
-    collections::HashMap,
     fmt,
     sync::{Arc, Mutex, RwLock},
 };
@@ -449,4 +448,53 @@ impl OpenOrder {
     pub fn set_size_filled(&mut self, size_filled: u32) {
         self.size_filled = size_filled;
     }
+}
+
+
+
+
+#[derive(Debug, Deserialize)]
+struct ApiPosition {
+    asset: String,
+    size: String,
+}
+
+fn parse_position_size(size: &str) -> Option<u32> {
+    size
+        .parse::<f64>()
+        .ok()
+        .map(|value| (value * 1000.0).round() as u32)
+}
+
+pub async fn get_positions(
+    user: &str,
+) -> DashMap<String, Arc<RwLock<Position>>> {
+    let client = reqwest::Client::new();
+    let positions = DashMap::new();
+    let mut offset = 0;
+    let mut position_length = 500;
+    while position_length >= 500 {
+        let url = format!(
+            "https://data-api.polymarket.com/positions?user={}&limit=500&offset={}",
+            user, offset
+        );
+        let resp = client.get(&url).send().await;
+        let returned_positions: Vec<ApiPosition> = match resp {
+            Ok(r) => match r.json::<Vec<ApiPosition>>().await {
+                Ok(json) => json,
+                Err(_) => break,
+            },
+            Err(_) => break,
+        };
+        position_length = returned_positions.len();
+        offset += position_length;
+        for pos in returned_positions {
+            if let Some(size) = parse_position_size(&pos.size) {
+                let asset_id = pos.asset;
+                let position = Arc::new(RwLock::new(Position::new(asset_id.clone(), size)));
+                positions.insert(asset_id, position);
+            }
+        }
+    }
+    positions
 }
