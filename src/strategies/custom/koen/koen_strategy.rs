@@ -7,7 +7,7 @@ use tokio::time::sleep;
 use crate::{
     exchange_listeners::poly_models::{Listener, OrderSide, PriceChange},
     strategies::{
-        strategy_utils::{parse_millis, StrategyAsset, StrategyClient},
+        strategy_utils::{parse_millis, StrategyAsset, StrategyClient, StrategyPosition},
         Strategy, StrategyContext,
     },
 };
@@ -17,6 +17,7 @@ pub struct KoenStrategy {
     price_lower_bound: f64,
     price_upper_bound: f64,
     predicted_move: f64,
+    predicted_move_hedge: f64,
     max_order_size: f64,
     max_counterparty_size: f64,
     min_same_side_liquidity: f64,
@@ -28,12 +29,13 @@ pub struct KoenStrategy {
 impl KoenStrategy {
     pub fn new() -> Self {
         Self {
-            max_spread: 0.02,
+            max_spread: 0.011,
             price_lower_bound: 0.025,
             price_upper_bound: 0.975,
-            predicted_move: 0.065,
+            predicted_move: 0.15,
+            predicted_move_hedge: 0.5,
             max_order_size: 50.0,
-            max_counterparty_size: 100.0,
+            max_counterparty_size: 50.0,
             min_same_side_liquidity: 150.0,
             trade_cooldown: Duration::from_secs(1 * 60),
             cancel_after: Duration::from_secs(1),
@@ -165,19 +167,66 @@ impl Strategy for KoenStrategy {
                     if gap == 0.0 {
                         return;
                     }
-                    let predicted_delta = gap * self.predicted_move;
 
+                    // Check position to determine if we should use hedge parameter
+                    let market_assets = StrategyAsset::get_yes_and_no(&ctx, asset_id);
+                    let positions = StrategyPosition::assets_position_map(&ctx, &market_assets);
+                    let is_yes_market = StrategyAsset::is_yes_market(&ctx, asset_id);
+
+                    // Calculate net position (yes - no)
+                    let yes_asset_id = market_assets.get(0);
+                    let no_asset_id = market_assets.get(1);
+                    let yes_position = yes_asset_id
+                        .and_then(|id| positions.get(id))
+                        .copied()
+                        .unwrap_or(0);
+                    let no_position = no_asset_id
+                        .and_then(|id| positions.get(id))
+                        .copied()
+                        .unwrap_or(0);
+                    let net_position_yes = yes_position as i32 - no_position as i32;
+                    let net_pos_contracts = net_position_yes as f64 / 1000.0;
+
+                    // Determine which predicted_move to use
+                    // If we're in no market and have >50 yes shares net, use hedge parameter
+                    // (1000 position units = 1 contract, so 50000 = 50 contracts)
+                    let use_hedge = if !is_yes_market && net_position_yes > 50000 {
+                        true
+                    } else if is_yes_market && net_position_yes > 50000 {
+                        // If we're in yes market and already long yes, we're not hedging by buying more yes
+                        false
+                    } else {
+                        false
+                    };
+
+                    let predicted_move_coef = if use_hedge {
+                        self.predicted_move_hedge
+                    } else {
+                        self.predicted_move
+                    };
+
+                    let predicted_delta = gap * predicted_move_coef;
                     let predicted_price = mid_price + predicted_delta;
                     let tick_size = orderbook.get_tick_size();
                     let negrisk = StrategyAsset::is_negrisk(&ctx, asset_id);
 
-                    if predicted_delta > 0.0 && predicted_price >= a1_price_f {
+                    // Require at least 20 bps (0.002) of edge: predicted price must be at least 0.002 higher than buy price
+                    let min_edge = 0.002;
+                    if predicted_delta > 0.0 && predicted_price >= a1_price_f && (predicted_price - a1_price_f) >= min_edge {
                         let price_int = Self::price_to_int(a1_price_f);
                         let trade_size = self.max_order_size;
                         if trade_size <= 0.0 {
                             return;
                         }
                         let size_int = Self::size_to_int(trade_size);
+
+                        // Net position of the asset we're buying: if buying YES, it's yes_position; if buying NO, it's -net_position_yes
+                        let asset_net_position = if is_yes_market {
+                            yes_position as i32
+                        } else {
+                            -net_position_yes
+                        };
+                        let asset_net_pos_contracts = asset_net_position as f64 / 1000.0;
 
                         if let Err(err) = StrategyClient::place_limit_order(
                             Arc::clone(&ctx),
@@ -193,14 +242,19 @@ impl Strategy for KoenStrategy {
                             let ctx_for_cancel = Arc::clone(&ctx);
                             let asset_for_cancel = asset_id.to_string();
                             let cancel_delay = self.cancel_after;
+                            let hedge_flag = if use_hedge { " [HEDGE]" } else { "" };
                             info!(
-                                "[{}] BUY executed asset={} gap={:.4} mid={:.3} predicted={:.3} size={:.3} | bids: {:.3}@{:.3}, {:.3}@{:.3} | asks: {:.3}@{:.3}, {:.3}@{:.3}",
+                                "[{}] BUY executed{} asset={} gap={:.4} mid={:.3} predicted={:.3} size={:.3} asset_net_pos={:.3} asset_net_pos_units={} price={:.3} | bids: {:.3}@{:.3}, {:.3}@{:.3} | asks: {:.3}@{:.3}, {:.3}@{:.3}",
                                 self.name(),
+                                hedge_flag,
                                 asset_id,
                                 gap,
                                 mid_price,
                                 predicted_price,
                                 trade_size,
+                                asset_net_pos_contracts,
+                                asset_net_position,
+                                a1_price_f,
                                 b1_price_f,
                                 b1_size_f,
                                 b2_price_f,
