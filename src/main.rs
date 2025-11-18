@@ -7,7 +7,7 @@ pub mod poly_orderbooks;
 pub mod strategies;
 
 use itertools::Itertools;
-use log::info;
+use log::{info, warn};
 use strategies::{Strategy, UpdateOrderStrategy, UpdateOrderbookStrategy, UpdatePositionStrategy};
 
 use clob_client::{
@@ -23,15 +23,12 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
     ops::Deref,
     process,
-    sync::{atomic, Arc},
+    sync::{atomic, Arc, RwLock},
     thread,
     time::{Instant, SystemTime},
 };
 
-use tokio::{
-    sync::{Mutex, RwLock},
-    time::{sleep, Duration},
-};
+use tokio::time::{sleep, Duration};
 
 use clob_client::constants::{FRAC_CENTS, FULL_CENTS};
 
@@ -49,18 +46,35 @@ use exchange_listeners::{event_processor, AppState, PolyMarketState};
 use tokio::runtime;
 
 use crate::{
-    exchange_listeners::autodiscover_markets::autodiscover_market_config,
-    marketmaking::poly_market_struct::events_json_to_events_with_market_map,
-    strategies::{
+    credentials::ADDRESS_STR, exchange_listeners::{autodiscover_markets::autodiscover_market_config, poly_models::{Position, get_positions}}, marketmaking::poly_market_struct::events_json_to_events_with_market_map, strategies::{
         app_state_updates::update_crypto_orderbooks::UpdateCryptoOrderbookStrategy,
         custom::{koen::koen_strategy::KoenStrategy, tob::tob_strategy::TobStrategy},
         logging::{
             bbo_logging::BBOLoggingStrategy, crypto_logging::CryptoLoggingStrategy,
             main_logging::MainLoggingStrategy, order_logging::OrderLoggingStrategy,
-            position_logging::PositionLoggingStrategy,
+            position_logging::PositionLoggingStrategy, trade_logging::TradeLoggingStrategy,
         },
-    },
+    }
 };
+
+fn log_initial_positions(positions: &Arc<DashMap<String, Arc<RwLock<Position>>>>) {
+    if positions.is_empty() {
+        info!("No initial positions found for the configured account.");
+        return;
+    }
+
+    info!("Loaded {} initial positions:", positions.len());
+    for entry in positions.iter() {
+        let asset_id = entry.key();
+        match entry.value().read() {
+            Ok(position) => {
+                let display_size = position.size as f64 / 1000.0;
+                info!("    {} => {:.3}", asset_id, display_size);
+            }
+            Err(_) => warn!("    {} => <failed to read position lock>", asset_id),
+        }
+    }
+}
 
 fn main() {
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -85,8 +99,11 @@ async fn debug_main() {
     let market_map = Arc::new(market_map); // put into Arc for sharing
     let market_asset_ids: Vec<String> = market_map.keys().cloned().collect();
     let market_asset_ids = Arc::new(market_asset_ids);
+    let positions = Arc::new(get_positions(ADDRESS_STR).await);
+    log_initial_positions(&positions.clone());
     let polymarket_state = Arc::new(PolyMarketState {
         markets: Arc::clone(&market_map),
+        positions,
         ..Default::default()
     }); // Orderbooks
     info!("Starting strategies");
@@ -94,11 +111,12 @@ async fn debug_main() {
         Arc::new(UpdateOrderbookStrategy::new()),
         Arc::new(UpdateOrderStrategy::new()),
         Arc::new(UpdatePositionStrategy::new()),
-        Arc::new(KoenStrategy::new()),
+        // Arc::new(KoenStrategy::new()),
         // Arc::new(OrderLoggingStrategy::new()),
         Arc::new(PositionLoggingStrategy::new()),
         // Arc::new(UpdateCryptoOrderbookStrategy::new()),
         // Arc::new(BBOLoggingStrategy::new()),
+        // Arc::new(TradeLoggingStrategy::new()),
         // Arc::new(MainLoggingStrategy::new()),
         // Arc::new(CryptoLoggingStrategy),
     ];
@@ -158,7 +176,7 @@ async fn debug_main() {
     });
 
     loop {
-        tokio::time::sleep(Duration::from_millis(1)).await;
+        sleep(Duration::from_millis(1)).await;
         let pending = counting_sender.pending();
         if pending > 0 {
             let now = std::time::SystemTime::now()

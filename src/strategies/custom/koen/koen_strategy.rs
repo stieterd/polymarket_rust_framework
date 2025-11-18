@@ -29,10 +29,10 @@ impl KoenStrategy {
     pub fn new() -> Self {
         Self {
             max_spread: 0.02,
-            price_lower_bound: 0.02,
-            price_upper_bound: 0.98,
+            price_lower_bound: 0.025,
+            price_upper_bound: 0.975,
             predicted_move: 0.065,
-            max_order_size: 25.0,
+            max_order_size: 50.0,
             max_counterparty_size: 100.0,
             min_same_side_liquidity: 150.0,
             trade_cooldown: Duration::from_secs(1 * 60),
@@ -173,8 +173,7 @@ impl Strategy for KoenStrategy {
 
                     if predicted_delta > 0.0 && predicted_price >= a1_price_f {
                         let price_int = Self::price_to_int(a1_price_f);
-                        let available_size = a1_size as f64 / 1000.0;
-                        let trade_size = available_size.min(self.max_order_size);
+                        let trade_size = self.max_order_size;
                         if trade_size <= 0.0 {
                             return;
                         }
