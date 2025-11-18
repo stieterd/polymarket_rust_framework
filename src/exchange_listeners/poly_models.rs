@@ -2,6 +2,7 @@ use crate::config::RATE_LIMIT_WAIT_TIME;
 
 use super::orderbooks::poly_orderbook::OrderBook;
 use dashmap::DashMap;
+use log::info;
 use serde::Deserialize;
 use std::{
     fmt,
@@ -456,14 +457,27 @@ impl OpenOrder {
 #[derive(Debug, Deserialize)]
 struct ApiPosition {
     asset: String,
-    size: String,
+    size: PositionSize,
 }
 
-fn parse_position_size(size: &str) -> Option<u32> {
-    size
-        .parse::<f64>()
-        .ok()
-        .map(|value| (value * 1000.0).round() as u32)
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum PositionSize {
+    String(String),
+    Float(f64),
+    Int(i64),
+}
+
+impl PositionSize {
+    fn to_milli_units(&self) -> Option<u32> {
+        let numeric = match self {
+            PositionSize::String(value) => value.parse::<f64>().ok()?,
+            PositionSize::Float(value) => *value,
+            PositionSize::Int(value) => *value as f64,
+        };
+
+        Some((numeric * 1000.0).round() as u32)
+    }
 }
 
 pub async fn get_positions(
@@ -479,17 +493,25 @@ pub async fn get_positions(
             user, offset
         );
         let resp = client.get(&url).send().await;
+
         let returned_positions: Vec<ApiPosition> = match resp {
             Ok(r) => match r.json::<Vec<ApiPosition>>().await {
                 Ok(json) => json,
-                Err(_) => break,
+                Err(e) => {
+                    log::error!("Failed to parse positions JSON: {:?}", e);
+                    break;
+                }
             },
-            Err(_) => break,
+            Err(e) => {
+                log::error!("Failed to fetch positions from Polymarket API: {:?}", e);
+                break;
+            }
         };
         position_length = returned_positions.len();
+
         offset += position_length;
         for pos in returned_positions {
-            if let Some(size) = parse_position_size(&pos.size) {
+            if let Some(size) = pos.size.to_milli_units() {
                 let asset_id = pos.asset;
                 let position = Arc::new(RwLock::new(Position::new(asset_id.clone(), size)));
                 positions.insert(asset_id, position);
