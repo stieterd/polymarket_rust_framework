@@ -73,10 +73,6 @@ impl Strategy for KoenStrategy {
 
         let market = StrategyAsset::get_market(&ctx.clone(), asset_id);
 
-        if market.question.clone().unwrap().contains("$") {
-            return;
-        }
-
         if let Some(orderbook_entry) = ctx.poly_state.orderbooks.get(asset_id) {
             if let Ok(orderbook) = orderbook_entry.read() {
                 if let Some(entry) = self.last_trade.get(asset_id) {

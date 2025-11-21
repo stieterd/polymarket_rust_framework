@@ -61,6 +61,12 @@ fn filter_neg_risk_markets(events: Vec<EventJson>) -> Vec<EventJson> {
                     } else if slug.contains("crypto") {
                         skip_market = true;
                         break;
+                    } else if slug.contains("stock-prices") {
+                        skip_market = true;
+                        break;
+                    } else if slug.contains("equities") {
+                        skip_market = true;
+                        break;
                     }
                 }
                 !skip_market
