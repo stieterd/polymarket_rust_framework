@@ -73,7 +73,7 @@ impl Strategy for KoenStrategy {
 
         let market = StrategyAsset::get_market(&ctx.clone(), asset_id);
 
-        if market.slug.clone().unwrap().contains("$") {
+        if market.question.clone().unwrap().contains("$") {
             return;
         }
 
